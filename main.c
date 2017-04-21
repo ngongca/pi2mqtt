@@ -43,8 +43,8 @@ int gCmdBufferLen;
 #define QOS          1
 #define TIMEOUT      10000L
 
-#define MQTTPASSWORD "piiot"
-#define MQTTUSER "mqttpi"
+#define MQTTPASSWORD "password"
+#define MQTTUSER "user"
 
 //----------------------------------------
 //----------------------------------------
