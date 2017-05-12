@@ -8,6 +8,7 @@ compile
 config.h
 config.h.in
 config.log
+configure
 config.status
 configure.scan
 coverage_report
