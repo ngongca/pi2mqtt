@@ -15,18 +15,13 @@
 #include "ds18b20pi.h"
 #include "debug.h"
 
-/**
- * Initialize the port structure
- * @param port
- * @param path
- * @param id
- * @return 
- */
-int DS18B20PI_initPort(DS18B20PI_port_t *port, const char *path, const char *id, const char *topic, int isFahrenheit) {
-    strncpy(port->id, id, sizeof (port->id));
-    strncpy(port->path, path, sizeof (port->path));
-    strncpy(port->topic, topic, sizeof (port->topic));
-    port->fahrenheitscale = isFahrenheit;
+DS18B20PI_port_t DS18B20PI_createPort(const char *path, const char *id, const char *topic, int isFahrenheit) {
+    DS18B20PI_port_t port;
+    strncpy(port.id, id, sizeof (port.id));
+    strncpy(port.path, path, sizeof (port.path));
+    strncpy(port.topic, topic, sizeof (port.topic));
+    port.fahrenheitscale = isFahrenheit;
+    return (port);
 }
 
 /**

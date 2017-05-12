@@ -26,7 +26,7 @@
 #include <fcntl.h>
 #include <string.h>
 
-#include "MQTTClient.h"
+#include <MQTTClient.h>
 #include "confuse.h"
 #include "ds18b20pi.h"
 #include "raven.h"
@@ -43,22 +43,29 @@ int gCmdBufferLen;
 #define QOS          1
 #define TIMEOUT      10000L
 
-#define MQTTPASSWORD "password"
-#define MQTTUSER "user"
+#define MQTTPASSWORD "piiot"
+#define MQTTUSER "mqttpi"
 
-//----------------------------------------
-//----------------------------------------
+#define MAXPORTS 32
 
 typedef struct {
     int killed; // flag to kill loop
 } my_context_t;
 
+typedef struct {
+    int size;
+    DS18B20PI_port_t ports[MAXPORTS];
+} ds18b20pi_ports_t;
+
+typedef struct {
+    int size;
+    raven_t ports[MAXPORTS];
+} raven_ports_t;
+
 void delivered(void *context, MQTTClient_deliveryToken dt) {
     char buf[128];
     snprintf(buf, sizeof (buf), "Message with token value %d delivery confirmed", dt);
     WriteDBGLog(buf);
-
-
 }
 
 int msgarrvd(void *context, char *topicName, int topicLen, MQTTClient_message *message) {
@@ -129,9 +136,7 @@ cfg_t *read_config(char config_filename[]) {
  * Load the initial parameters.
  * TODO: build a parser to read XML file at setup.
  */
-void LoadINIParms(cfg_t **config, DS18B20PI_port_t *sensor, raven_t *raven, MQTTClient *client, char configFile[]) {
-
-    int rc = 0;
+void LoadINIParms(cfg_t **config, ds18b20pi_ports_t *sensors, raven_ports_t *raven, MQTTClient *client, char configFile[]) {
     int i;
     cfg_t *scfg;
     char buf[64];
@@ -139,17 +144,23 @@ void LoadINIParms(cfg_t **config, DS18B20PI_port_t *sensor, raven_t *raven, MQTT
     *config = read_config(configFile);
 
     for (i = 0; i < cfg_size(*config, "ds18b20"); i++) {
-        // TODO: create multiple sensors.  For now just reading the last entry.
-        scfg = cfg_getnsec(*config, "ds18b20", i);
-        DS18B20PI_initPort(sensor, cfg_getstr(scfg, "address"), cfg_title(scfg), cfg_getstr(scfg, "mqttpubtopic"), cfg_getint(scfg, "isfahrenheit"));
+        if (i < MAXPORTS) {
+            scfg = cfg_getnsec(*config, "ds18b20", i);
+            sensors->ports[i] = DS18B20PI_createPort(cfg_getstr(scfg, "address"), cfg_title(scfg), cfg_getstr(scfg, "mqttpubtopic"), cfg_getint(scfg, "isfahrenheit"));
+            sensors->size++;
+        }
     }
     for (i = 0; i < cfg_size(*config, "RAVEn"); i++) {
-        // TODO: create multiple sensors.  For now just reading the last entry.
-        scfg = cfg_getnsec(*config, "RAVEn", i);
-        RAVEn_init(raven, cfg_getstr(scfg, "address"), cfg_title(scfg), cfg_getstr(scfg, "mqttpubtopic"));
+        if (i < MAXPORTS) {
+            scfg = cfg_getnsec(*config, "RAVEn", i);
+            raven->ports[i] = RAVEn_create(cfg_getstr(scfg, "address"), cfg_title(scfg), cfg_getstr(scfg, "mqttpubtopic"));
+            raven->size++;
+        }
     }
     if (MQTTClient_create(client, cfg_getstr(*config, "mqttbrokeraddress"), cfg_getstr(*config, "clientid"), MQTTCLIENT_PERSISTENCE_NONE, NULL) != MQTTCLIENT_SUCCESS) {
-        DS18B20PI_closePort(*sensor);
+        for (i = 0; i < sensors->size; i++) {
+            DS18B20PI_closePort(sensors->ports[i]);
+        };
         snprintf(buf, sizeof (buf), "Could not create MQTT Client at %s", cfg_getstr(*config, "mqttbrokeraddress"));
         exit(-1);
     }
@@ -231,13 +242,19 @@ int ProcessRAVEnData(raven_t rvn, MQTTClient mqttClient) {
 int main(int argc, char** argv) {
     int c;
     int rc;
+    int i;
     char buf[1024];
     int cntr;
+    ds18b20pi_ports_t sensorPorts;
     DS18B20PI_port_t sensorPort;
     raven_t ravenPort;
+    raven_ports_t ravenPorts;
     MQTTClient mqttClient;
     MQTTClient_connectOptions conn_opts = MQTTClient_connectOptions_initializer;
     my_context_t my_context;
+
+    sensorPorts.size = 0;
+
     cfg_t *cfg = 0;
     int verbose = 0;
     char *configFile = "./ds18b20pi.config";
@@ -263,7 +280,7 @@ int main(int argc, char** argv) {
         }
     }
 
-    LoadINIParms(&cfg, &sensorPort, &ravenPort, &mqttClient, configFile); // Initialize ports.
+    LoadINIParms(&cfg, &sensorPorts, &ravenPorts, &mqttClient, configFile); // Initialize ports.
     InitDBGLog("t2MQTT", cfg_getstr(cfg, "debuglogfile"), cfg_getint(cfg, "debugmode"), verbose);
     WriteDBGLog(STARTUP);
     rc = 0;
@@ -282,29 +299,37 @@ int main(int argc, char** argv) {
     WriteDBGLog(buf);
     MQTTClient_subscribe(mqttClient, cfg_getstr(cfg, "mqttsubtopic"), QOS);
     cntr = 0;
-    if (RAVEn_openPort(&ravenPort) != RAVEN_PASS) {
-        WriteDBGLog("Error opening RAVEn Port");
-        exit(EXIT_FAILURE);
+    for (i = 0; i < ravenPorts.size; i++) {
+        ravenPort = ravenPorts.ports[i];
+        if (RAVEn_openPort(&ravenPort) != RAVEN_PASS) {
+            WriteDBGLog("Error opening RAVEn Port");
+            exit(EXIT_FAILURE);
+        }
+        RAVEn_sendCmd(ravenPort, "initialize");
     }
-    RAVEn_sendCmd(ravenPort, "initialize");
 
     while (!my_context.killed) {
-        if (cfg_getint(cfg, "delay") > cntr) {
-            // must reopen port to get a reading.
-            if (DS18B20PI_openPort(&sensorPort) != DS18B20PI_SUCCESS) {
-                WriteDBGLog("Error opening DS18B20 port");
-                exit(EXIT_FAILURE);
+        if (cfg_getint(cfg, "delay") <= cntr) {
+            for (i = 0; i < sensorPorts.size; i++) {
+                sensorPort = sensorPorts.ports[i];
+                if (DS18B20PI_openPort(&sensorPort) != DS18B20PI_SUCCESS) {
+                    WriteDBGLog("Error opening DS18B20 port");
+                    exit(EXIT_FAILURE);
+                }
+                ProcessDS18B20PIData(sensorPort, mqttClient);
+                DS18B20PI_closePort(sensorPort);
             }
-            ProcessDS18B20PIData(sensorPort, mqttClient);
             cntr = 0;
-            DS18B20PI_closePort(sensorPort);
         }
-        ProcessRAVEnData(ravenPort, mqttClient);
+        for (i = 0; i < ravenPorts.size; i++) {
+            ProcessRAVEnData(ravenPorts.ports[i], mqttClient);
+        }
         cntr++;
         sleep(1);
     }
-    RAVEn_closePort(ravenPort);
-
+    for (i = 0; i < ravenPorts.size; i++) {
+        RAVEn_closePort(ravenPort);
+    }
 
     WriteDBGLog("Closing mqttClient");
     MQTTClient_disconnect(mqttClient, 10000);

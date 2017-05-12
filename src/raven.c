@@ -45,10 +45,12 @@ int RAVEn_sendCmd(raven_t rvn, char const *cmd) {
  * @param id name for identification
  * @param topic default publish topic for this descriptor
  */
-void RAVEn_init(raven_t *raven_ptr, const char *path, const char *id, const char *topic) {
-    strncpy(raven_ptr->path, path, sizeof (raven_ptr->path));
-    strncpy(raven_ptr->id, id, sizeof (raven_ptr->id));
-    strncpy(raven_ptr->topic, topic, sizeof (raven_ptr->topic));
+raven_t RAVEn_create(const char *path, const char *id, const char *topic) {
+    raven_t raven;
+    strncpy(raven.path, path, sizeof (raven.path));
+    strncpy(raven.id, id, sizeof (raven.id));
+    strncpy(raven.topic, topic, sizeof (raven.topic));
+    return raven;
 }
 
 /**
