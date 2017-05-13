@@ -11,8 +11,7 @@ else
 # interval in seconds to sample temperature
 delay = 5
 
-# client ID for the mqtt sensor controller (usually the microcontroller id such as the P
-I)
+# client ID for the mqtt sensor controller (usually the microcontroller id such as the PI)
 clientid = "client"
 
 #mqtt broker address
