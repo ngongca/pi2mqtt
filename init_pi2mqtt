@@ -1,0 +1,70 @@
+#!/bin/bash
+
+if [ -f "template.conf" ]; then
+  echo "pi2mqtt_setup template.conf exists, no new one created"
+else
+  echo "pi2mqtt_setup creating template.conf"
+  cat << EOF > template.conf
+# template.conf - configuration file to provide to the pi2mqtt tool.  This file sets
+#  devices up so that pi2mqtt will monitor.
+
+# interval in seconds to sample temperature
+delay = 5
+
+# client ID for the mqtt sensor controller (usually the microcontroller id such as the P
+I)
+clientid = "client"
+
+#mqtt broker address
+mqttbrokeraddress = "localhost"
+
+# topic for the sensor controller's management port.  
+# This will be monitored to provide management messages back to the controller.
+mqttsubtopic = "home/+/manage"
+
+EOF
+  if [ -d /sys/bus/w1/devices ];
+  then
+    y=0
+    for x in /sys/bus/w1/devices/28*
+    do
+      echo '# specific sensor data that is connected to the controller  device type and title.' >> template.conf
+      echo "ds18b20 sensor$y {" >> template.conf
+      echo " address = \"$x\"" >> template.conf
+      echo " mqttpubtopic = \"$x\"" >> template.conf
+      echo " isfahrenheit = 1" >> template.conf
+      echo "}" >> template.conf
+      echo " " >> template.conf
+      y=$((y+1))
+    done
+  else
+    echo "pi2mqtt_setup - no one wire devices found"
+  fi
+  if [ -d /dev/ttyUSB0 ];
+  then
+    echo << EOF1 >> template.conf
+
+# uncomment the next series if you have a RAVEn device attached to the rpi and want to monitor
+#RAVEn raven {
+# address = "/dev/ttyUSB0"
+# mqttpubtopic = "home/raven1/demand"
+#}
+EOF1
+  else
+    echo "pi2mqtt_setup - no USB device found, assuming no RAVEn"
+  fi
+  echo << EOF2 >> template.conf
+
+# the log file name that will be created if -v or debug mode is set
+debuglogfile = "./temp2mqtt.log"
+
+# uncomment the next line if you wish to have debug mode.
+#debugmode = 1
+
+EOF2
+
+
+fi
+
+
+
