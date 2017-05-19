@@ -1,7 +1,25 @@
 /*
- * To change this license header, choose License Headers in Project Properties.
- * To change this template file, choose Tools | Templates
- * and open the template in the editor.
+ * The MIT License
+ *
+ * Copyright 2017 Nick Ong <onichola@gmail.com>.
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+ * THE SOFTWARE.
  */
 
 #include <stdio.h>
@@ -19,7 +37,9 @@
  * @param _cmd - command to send
  * @return - returns RAVEN_PASS if successful, RAVEN_FAIL if not.
  */
-int RAVEn_sendCmd(raven_t rvn, char const *cmd) {
+int 
+RAVEn_sendCmd(raven_t rvn, char const *cmd)
+{
     int len;
     char buf[256];
     char cmdbuffer[1024];
@@ -45,7 +65,9 @@ int RAVEn_sendCmd(raven_t rvn, char const *cmd) {
  * @param id name for identification
  * @param topic default publish topic for this descriptor
  */
-raven_t RAVEn_create(const char *path, const char *id, const char *topic) {
+raven_t 
+RAVEn_create(const char *path, const char *id, const char *topic) 
+{
     raven_t raven;
     strncpy(raven.path, path, sizeof (raven.path));
     strncpy(raven.id, id, sizeof (raven.id));
@@ -58,7 +80,9 @@ raven_t RAVEn_create(const char *path, const char *id, const char *topic) {
  * @param raven_ptr
  * @return RAVEN_PASS if successful, RAVEN_FAIL if not.
  */
-int RAVEn_openPort(raven_t *raven_ptr) {
+int 
+RAVEn_openPort(raven_t *raven_ptr)
+{
     char buf[128];
 
     snprintf(buf, sizeof (buf), "Opening port [%s]", raven_ptr->path);
@@ -83,7 +107,9 @@ int RAVEn_openPort(raven_t *raven_ptr) {
     return (RAVEN_PASS);
 } //open_port
 
-void RAVEn_closePort(raven_t rvn) {
+void 
+RAVEn_closePort(raven_t rvn) 
+{
     WriteDBGLog("Closing RAVEn Port");
     fclose(rvn.FH);
     close(rvn.FD);
@@ -94,7 +120,9 @@ void RAVEn_closePort(raven_t rvn) {
  * @param data_ptr
  * @return RAVEN_PASS if there was a match and data is good, RAVEN_FAIL otherwise.
  */
-int RAVEn_parseXML(char buffer[], raven_data_t *data_ptr) {
+static int 
+RAVEn_parseXML(char buffer[], raven_data_t *data_ptr) 
+{
     char* p;
     int demand;
     uint demand_u;
@@ -132,8 +160,15 @@ int RAVEn_parseXML(char buffer[], raven_data_t *data_ptr) {
 }
 
 
-int RAVEn_getData(raven_t rvn, raven_data_t *rvnData_ptr) {
-
+/**
+ * RAVEn_getData - Read data from RAVEN port
+ * @param rvn port to read
+ * @param rvnData_ptr address to place data
+ * @return 
+ */
+int 
+RAVEn_getData(raven_t rvn, raven_data_t *rvnData_ptr) 
+{
     int retval;
     int rblen;
     char readBuf[1024];

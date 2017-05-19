@@ -40,12 +40,11 @@ extern "C" {
         char macid[256]; //mac ID of the RAVEn read from XML
     } raven_data_t;
 
-    int RAVEn_sendCmd(raven_t, const char *);
-    raven_t RAVEn_create(const char *, const char *, const char *);
-    int RAVEn_openPort(raven_t *);
-    void RAVEn_closePort(raven_t);
-    int RAVEn_parseXML(char *, raven_data_t *);
-    int RAVEn_getData(raven_t, raven_data_t *);
+    extern int RAVEn_sendCmd(raven_t, const char *);
+    extern raven_t RAVEn_create(const char *, const char *, const char *);
+    extern int RAVEn_openPort(raven_t *);
+    extern void RAVEn_closePort(raven_t);
+    extern int RAVEn_getData(raven_t, raven_data_t *);
 
 #ifdef __cplusplus
 }

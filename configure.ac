@@ -13,6 +13,7 @@ AC_PROG_CC
 # Checks for libraries.
 AC_SEARCH_LIBS([MQTTClient_subscribe], [paho-mqtt3c])
 AC_SEARCH_LIBS([cfg_parse], [confuse])
+AC_SEARCH_LIBS([wiringPiSetup], [wiringPi])
 
 # Checks for header files.
 AC_CHECK_HEADERS([fcntl.h])

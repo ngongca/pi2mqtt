@@ -1,14 +1,30 @@
 /*
- * To change this license header, choose License Headers in Project Properties.
- * To change this template file, choose Tools | Templates
- * and open the template in the editor.
+ * The MIT License
+ *
+ * Copyright 2017 Nick Ong <onichola@gmail.com>.
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+ * THE SOFTWARE.
  */
 
-/* 
- * File:   main.c
- * Author: nick
- *
- * Created on April 1, 2017, 1:56 PM
+/*
+ * File: main.c
+ * Author: Nick Ong
  */
 
 #include <stdio.h>
@@ -29,16 +45,10 @@
 #include <MQTTClient.h>
 #include "confuse.h"
 #include "ds18b20pi.h"
+#include "dht22.h"
 #include "raven.h"
 
 #define STARTUP "\n\npi2mqtt - \nVersion 0.1 Mar 28, 2017\nRead sensors from RPI and publish data to mqtt\r\n\r\n"
-char *gApp = "pi2mqtt";
-
-char gTempDevLoc[128];
-char gTempDevPath[256];
-
-char gCmdBuffer[1024 * 5];
-int gCmdBufferLen;
 
 #define QOS          1
 #define TIMEOUT      10000L
@@ -62,13 +72,30 @@ typedef struct {
     raven_t ports[MAXPORTS];
 } raven_ports_t;
 
-void delivered(void *context, MQTTClient_deliveryToken dt) {
+typedef struct {
+    int size;
+    dht22_port_t ports[MAXPORTS];
+} dht22_ports_t;
+
+char *gApp = "pi2mqtt";
+
+char gTempDevLoc[128];
+char gTempDevPath[256];
+
+char gCmdBuffer[1024 * 5];
+int gCmdBufferLen;
+
+void
+delivered(void *context, MQTTClient_deliveryToken dt) 
+{
     char buf[128];
     snprintf(buf, sizeof (buf), "Message with token value %d delivery confirmed", dt);
     WriteDBGLog(buf);
 }
 
-int msgarrvd(void *context, char *topicName, int topicLen, MQTTClient_message *message) {
+int
+msgarrvd(void *context, char *topicName, int topicLen, MQTTClient_message *message) 
+{
     char buf[128];
     char msg[128];
     my_context_t *c = (my_context_t *) context;
@@ -93,13 +120,16 @@ int msgarrvd(void *context, char *topicName, int topicLen, MQTTClient_message *m
     return 1;
 }
 
-void connlost(void *context, char *cause) {
+void
+connlost(void *context, char *cause) 
+{
     printf("\nConnection lost\n");
     printf("     cause: %s\n", cause);
 }
 
-cfg_t *read_config(char config_filename[]) {
-
+static cfg_t *
+read_config(char config_filename[]) 
+{
     cfg_t *cfg;
     static cfg_opt_t ds18b20_opts[] = {
         CFG_STR("address", "/sys/bus/w1/devices", CFGF_NONE),
@@ -113,6 +143,13 @@ cfg_t *read_config(char config_filename[]) {
         CFG_END()
     };
 
+    static cfg_opt_t dht22_opts[] = {
+        CFG_INT("pin", 1, CFGF_NONE),
+        CFG_STR("mqttpubtopic", "home/device", CFGF_NONE),
+        CFG_INT("isfahrenheit", 1, CFGF_NONE),
+        CFG_END()
+    };
+
     cfg_opt_t opts[] = {
         CFG_INT("delay", 5, CFGF_NONE),
         CFG_STR("mqttbrokeraddress", "localhost", CFGF_NONE),
@@ -122,6 +159,7 @@ cfg_t *read_config(char config_filename[]) {
         CFG_INT("debugmode", 0, CFGF_NONE),
         CFG_SEC("ds18b20", ds18b20_opts, CFGF_MULTI | CFGF_TITLE),
         CFG_SEC("RAVEn", raven_opts, CFGF_MULTI | CFGF_TITLE),
+        CFG_SEC("dht22", dht22_opts, CFGF_MULTI | CFGF_TITLE),
         CFG_END()
     };
 
@@ -136,7 +174,9 @@ cfg_t *read_config(char config_filename[]) {
  * Load the initial parameters.
  * TODO: build a parser to read XML file at setup.
  */
-void LoadINIParms(cfg_t **config, ds18b20pi_ports_t *sensors, raven_ports_t *raven, MQTTClient *client, char configFile[]) {
+static void
+LoadINIParms(cfg_t **config, ds18b20pi_ports_t *sensors, raven_ports_t *raven, dht22_ports_t *dht22p, MQTTClient *client, char configFile[]) 
+{
     int i;
     cfg_t *scfg;
     char buf[64];
@@ -157,7 +197,15 @@ void LoadINIParms(cfg_t **config, ds18b20pi_ports_t *sensors, raven_ports_t *rav
             raven->size++;
         }
     }
-    if (MQTTClient_create(client, cfg_getstr(*config, "mqttbrokeraddress"), cfg_getstr(*config, "clientid"), MQTTCLIENT_PERSISTENCE_NONE, NULL) != MQTTCLIENT_SUCCESS) {
+    for (i = 0; i < cfg_size(*config, "dht22"); i++) {
+        if (i < MAXPORTS) {
+            scfg = cfg_getnsec(*config, "dht22", i);
+            dht22p->ports[i] = dht22_createPort(cfg_getint(scfg, "pin"), cfg_title(scfg), cfg_getstr(scfg, "mqttpubtopic"),  cfg_getint(scfg, "isfahrenheit"));
+            dht22p->size++;
+        }
+    }
+    if (MQTTClient_create(client, cfg_getstr(*config, "mqttbrokeraddress"), 
+            cfg_getstr(*config, "clientid"), MQTTCLIENT_PERSISTENCE_NONE, NULL) != MQTTCLIENT_SUCCESS) {
         for (i = 0; i < sensors->size; i++) {
             DS18B20PI_closePort(sensors->ports[i]);
         };
@@ -166,7 +214,16 @@ void LoadINIParms(cfg_t **config, ds18b20pi_ports_t *sensors, raven_ports_t *rav
     }
 }
 
-int mqttSendData(MQTTClient mqttClient, char *payload, char *topic) {
+/**
+ * 
+ * @param mqttClient
+ * @param payload
+ * @param topic
+ * @return 
+ */
+static int
+mqttSendData(MQTTClient mqttClient, char *payload, char *topic) 
+{
     MQTTClient_message pubmsg = MQTTClient_message_initializer;
     MQTTClient_deliveryToken token;
     char dbgBuf[256];
@@ -186,14 +243,9 @@ int mqttSendData(MQTTClient mqttClient, char *payload, char *topic) {
     WriteDBGLog(dbgBuf);
 }
 
-/*===========================================================================*/
-/* PROCESSDATA - Process the usb com port and store XML data into SQL DB     */
-
-/*===========================================================================*/
-int ProcessDS18B20PIData(DS18B20PI_port_t sensorPort, MQTTClient mqttClient) {
-    MQTTClient_message pubmsg = MQTTClient_message_initializer;
-    MQTTClient_deliveryToken token;
-
+static int
+ProcessDS18B20PIData(DS18B20PI_port_t sensorPort, MQTTClient mqttClient) 
+{
     int rc;
     DS18B20PI_data_t data;
 
@@ -214,10 +266,9 @@ int ProcessDS18B20PIData(DS18B20PI_port_t sensorPort, MQTTClient mqttClient) {
     return (rc);
 }
 
-int ProcessRAVEnData(raven_t rvn, MQTTClient mqttClient) {
-    MQTTClient_message pubmsg = MQTTClient_message_initializer;
-    MQTTClient_deliveryToken token;
-
+static int
+ProcessRAVEnData(raven_t rvn, MQTTClient mqttClient) 
+{
     raven_data_t data;
 
     char mqttPayload[1024];
@@ -236,10 +287,39 @@ int ProcessRAVEnData(raven_t rvn, MQTTClient mqttClient) {
     return (RAVEN_PASS);
 }
 
-/*
- * 
- */
-int main(int argc, char** argv) {
+static int
+ProcessDHT22Data(dht22_port_t dht22, MQTTClient mqttClient) 
+{
+    dht22_data_t data;
+
+    char mqttPayload[1024];
+    char dbgBuf[1024];
+    char topic[256];
+
+    WriteDBGLog("Starting to PROCESS dht22 input");
+    if ((read_dht22_dat(dht22, &data)) == DHT22_SUCCESS) {
+        snprintf(mqttPayload, sizeof (mqttPayload), "{\"temperature\":{\"timestamp\":%d,\"value\":%.3f}}", data.timestamp, data.temperature);
+        snprintf(topic, sizeof (topic), "%s/temperature", dht22.topic);
+        snprintf(dbgBuf, sizeof (dbgBuf), "Topic %s Payload %s", topic, mqttPayload);
+        WriteDBGLog(dbgBuf);
+        
+        mqttSendData(mqttClient, mqttPayload, topic);
+
+        snprintf(mqttPayload, sizeof (mqttPayload), "{\"humidity\":{\"timestamp\":%d,\"value\":%.3f}}", data.timestamp, data.humidity);
+        snprintf(topic, sizeof (topic), "%s/humidity", dht22.topic);
+        snprintf(dbgBuf, sizeof (dbgBuf), "Topic %s Payload %s", topic, mqttPayload);
+        WriteDBGLog(dbgBuf);
+        mqttSendData(mqttClient, mqttPayload, topic);
+    } else {
+        WriteDBGLog("Failed to read dht22 sensor");
+        return (DHT22_FAILURE);
+    }
+    return (DHT22_SUCCESS);
+}
+
+int
+main(int argc, char** argv) 
+{
     int c;
     int rc;
     int i;
@@ -249,11 +329,15 @@ int main(int argc, char** argv) {
     DS18B20PI_port_t sensorPort;
     raven_t ravenPort;
     raven_ports_t ravenPorts;
+    dht22_ports_t dht22Ports;
+    dht22_port_t dht22Port;
     MQTTClient mqttClient;
     MQTTClient_connectOptions conn_opts = MQTTClient_connectOptions_initializer;
     my_context_t my_context;
 
     sensorPorts.size = 0;
+    ravenPorts.size = 0;
+    dht22Ports.size = 0;
 
     cfg_t *cfg = 0;
     int verbose = 0;
@@ -280,8 +364,8 @@ int main(int argc, char** argv) {
         }
     }
 
-    LoadINIParms(&cfg, &sensorPorts, &ravenPorts, &mqttClient, configFile); // Initialize ports.
-    InitDBGLog("t2MQTT", cfg_getstr(cfg, "debuglogfile"), cfg_getint(cfg, "debugmode"), verbose);
+    LoadINIParms(&cfg, &sensorPorts, &ravenPorts, &dht22Ports, &mqttClient, configFile); // Initialize ports.
+    InitDBGLog("pi2MQTT", cfg_getstr(cfg, "debuglogfile"), cfg_getint(cfg, "debugmode"), verbose);
     WriteDBGLog(STARTUP);
     rc = 0;
     my_context.killed = 0;
@@ -295,10 +379,12 @@ int main(int argc, char** argv) {
         WriteDBGLog(buf);
         exit(EXIT_FAILURE);
     }
-    snprintf(buf, sizeof (buf), "Subscribing to topic %s\nfor client %s using QoS%d", cfg_getstr(cfg, "mqttsubtopic"), cfg_getstr(cfg, "clientid"), QOS);
+    snprintf(buf, sizeof (buf), "Subscribing to topic %s for client %s using QoS%d", cfg_getstr(cfg, "mqttsubtopic"), cfg_getstr(cfg, "clientid"), QOS);
     WriteDBGLog(buf);
     MQTTClient_subscribe(mqttClient, cfg_getstr(cfg, "mqttsubtopic"), QOS);
     cntr = 0;
+
+    //init RAVEn
     for (i = 0; i < ravenPorts.size; i++) {
         ravenPort = ravenPorts.ports[i];
         if (RAVEn_openPort(&ravenPort) != RAVEN_PASS) {
@@ -306,6 +392,12 @@ int main(int argc, char** argv) {
             exit(EXIT_FAILURE);
         }
         RAVEn_sendCmd(ravenPort, "initialize");
+    }
+
+    //init DHT22
+    if (dht22_init() != DHT22_SUCCESS) {
+        WriteDBGLog("Error opening DHT22 sensor");
+        exit(EXIT_FAILURE);
     }
 
     while (!my_context.killed) {
@@ -318,6 +410,12 @@ int main(int argc, char** argv) {
                 }
                 ProcessDS18B20PIData(sensorPort, mqttClient);
                 DS18B20PI_closePort(sensorPort);
+            }
+
+            // process dht22
+            for (i = 0; i < dht22Ports.size; i++) {
+                dht22Port = dht22Ports.ports[i];
+                ProcessDHT22Data(dht22Port, mqttClient);
             }
             cntr = 0;
         }

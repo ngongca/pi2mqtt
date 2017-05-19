@@ -41,7 +41,7 @@ EOF
   fi
   if [ -d /dev/ttyUSB0 ];
   then
-    echo << EOF1 >> template.conf
+    cat << EOF1 >> template.conf
 
 # uncomment the next series if you have a RAVEn device attached to the rpi and want to monitor
 #RAVEn raven {
@@ -52,7 +52,15 @@ EOF1
   else
     echo "pi2mqtt_setup - no USB device found, assuming no RAVEn"
   fi
-  echo << EOF2 >> template.conf
+
+ 
+  cat << EOF2 >> template.conf
+# uncomment the next series if you have a DHT22/11 device attached to the rpi and want to monitor
+#dht22 dht22 {
+# pin = 4
+# mqttpubtopic = "home/dht22"
+# isfahrenheit = 1
+#}
 
 # the log file name that will be created if -v or debug mode is set
 debuglogfile = "./temp2mqtt.log"
