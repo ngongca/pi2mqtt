@@ -1,5 +1,6 @@
 /autom4te.cache/
 /config/
+nbproject
 Makefile
 Makefile.in
 aclocal.m4
