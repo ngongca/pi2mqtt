@@ -30,7 +30,7 @@ EOF
       echo '# specific sensor data that is connected to the controller  device type and title.' >> template.conf
       echo "ds18b20 sensor$y {" >> template.conf
       echo " address = \"$x\"" >> template.conf
-      echo " mqttpubtopic = \"$x\"" >> template.conf
+      echo " mqttpubtopic = \"home/$y/temp\"" >> template.conf
       echo " isfahrenheit = 1" >> template.conf
       echo "}" >> template.conf
       echo " " >> template.conf
