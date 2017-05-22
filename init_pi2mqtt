@@ -5,14 +5,16 @@ if [ -f "template.conf" ]; then
 else
   echo "pi2mqtt_setup creating template.conf"
   cat << EOF > template.conf
-# template.conf - configuration file to provide to the pi2mqtt tool.  This file sets
-#  devices up so that pi2mqtt will monitor.
+# template.conf - configuration file to provide to the pi2mqtt tool.  
+# This file sets devices up so that pi2mqtt will monitor.
 
 # interval in seconds to sample temperature
 delay = 5
 
-# client ID for the mqtt sensor controller (usually the microcontroller id such as the PI)
-clientid = "client"
+# client ID for the mqtt sensor controller (usually the microcontroller id 
+# such as the PI  THIS MUST BE A UNIQUE identifier)
+clientid = client$RANDOM
+
 
 #mqtt broker address
 mqttbrokeraddress = "localhost"
@@ -29,7 +31,7 @@ EOF
     do
       if [ -d $x ];
       then
-        echo '# specific sensor data that is connected to the controller  device type and title.' >> template.conf
+        echo '# specific sensor data that is connected to the controller device\n type and title.' >> template.conf
         echo "ds18b20 sensor$y {" >> template.conf
         echo " address = \"$x\"" >> template.conf
         echo " mqttpubtopic = \"home/$y/temp\"" >> template.conf
@@ -46,7 +48,8 @@ EOF
   then
     cat << EOF1 >> template.conf
 
-# uncomment the next series if you have a RAVEn device attached to the rpi and want to monitor
+# uncomment the next series if you have a RAVEn device attached to the rpi 
+# and want to monitor.  Ensure the serial USB is available
 #RAVEn raven {
 # address = "/dev/ttyUSB0"
 # mqttpubtopic = "home/raven1/demand"
@@ -59,7 +62,8 @@ EOF1
 
  
   cat << EOF2 >> template.conf
-# uncomment the next series if you have a DHT22/11 device attached to the rpi and want to monitor
+# uncomment the next series if you have a DHT22/11 device attached to the rpi
+# and want to monitor.  Set the pin location if different.
 #dht22 dht22 {
 # pin = 4
 # mqttpubtopic = "home/dht22"
