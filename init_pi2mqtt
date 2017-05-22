@@ -27,19 +27,22 @@ EOF
     y=0
     for x in /sys/bus/w1/devices/28*
     do
-      echo '# specific sensor data that is connected to the controller  device type and title.' >> template.conf
-      echo "ds18b20 sensor$y {" >> template.conf
-      echo " address = \"$x\"" >> template.conf
-      echo " mqttpubtopic = \"home/$y/temp\"" >> template.conf
-      echo " isfahrenheit = 1" >> template.conf
-      echo "}" >> template.conf
-      echo " " >> template.conf
-      y=$((y+1))
+      if [ -d $x ];
+      then
+        echo '# specific sensor data that is connected to the controller  device type and title.' >> template.conf
+        echo "ds18b20 sensor$y {" >> template.conf
+        echo " address = \"$x\"" >> template.conf
+        echo " mqttpubtopic = \"home/$y/temp\"" >> template.conf
+        echo " isfahrenheit = 1" >> template.conf
+        echo "}" >> template.conf
+        echo " " >> template.conf
+        y=$((y+1))
+      fi
     done
   else
     echo "pi2mqtt_setup - no one wire devices found"
   fi
-  if [ -d /dev/ttyUSB0 ];
+  if [ -c /dev/ttyUSB0 ];
   then
     cat << EOF1 >> template.conf
 
@@ -48,6 +51,7 @@ EOF
 # address = "/dev/ttyUSB0"
 # mqttpubtopic = "home/raven1/demand"
 #}
+
 EOF1
   else
     echo "pi2mqtt_setup - no USB device found, assuming no RAVEn"

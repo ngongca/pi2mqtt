@@ -35,5 +35,6 @@ template.conf
 *.gcno
 *.gcda
 src/bin/pi2mqtt
+src/pi2mqtt
 
 
