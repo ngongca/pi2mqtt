@@ -326,11 +326,8 @@ main(int argc, char** argv)
     char buf[1024];
     int cntr;
     ds18b20pi_ports_t sensorPorts;
-    DS18B20PI_port_t sensorPort;
-    raven_t ravenPort;
     raven_ports_t ravenPorts;
     dht22_ports_t dht22Ports;
-    dht22_port_t dht22Port;
     MQTTClient mqttClient;
     MQTTClient_connectOptions conn_opts = MQTTClient_connectOptions_initializer;
     my_context_t my_context;
@@ -390,7 +387,7 @@ main(int argc, char** argv)
             WriteDBGLog("Error opening RAVEn Port");
             exit(EXIT_FAILURE);
         }
-        RAVEn_sendCmd(ravenPort, "initialize");
+        RAVEn_sendCmd(ravenPorts.ports[i], "initialize");
     }
 
     //init DHT22
@@ -402,19 +399,17 @@ main(int argc, char** argv)
     while (!my_context.killed) {
         if (cfg_getint(cfg, "delay") <= cntr) {
             for (i = 0; i < sensorPorts.size; i++) {
-                sensorPort = sensorPorts.ports[i];
-                if (DS18B20PI_openPort(&sensorPort) != DS18B20PI_SUCCESS) {
+                if (DS18B20PI_openPort(&sensorPorts.ports[i]) != DS18B20PI_SUCCESS) {
                     WriteDBGLog("Error opening DS18B20 port");
                     exit(EXIT_FAILURE);
                 }
-                ProcessDS18B20PIData(sensorPort, mqttClient);
-                DS18B20PI_closePort(sensorPort);
+                ProcessDS18B20PIData(sensorPorts.ports[i], mqttClient);
+                DS18B20PI_closePort(sensorPorts.ports[i]);
             }
 
             // process dht22
             for (i = 0; i < dht22Ports.size; i++) {
-                dht22Port = dht22Ports.ports[i];
-                ProcessDHT22Data(dht22Port, mqttClient);
+                ProcessDHT22Data(dht22Ports.ports[i], mqttClient);
             }
             cntr = 0;
         }
@@ -425,7 +420,7 @@ main(int argc, char** argv)
         sleep(1);
     }
     for (i = 0; i < ravenPorts.size; i++) {
-        RAVEn_closePort(ravenPort);
+        RAVEn_closePort(ravenPorts.ports[i]);
     }
 
     WriteDBGLog("Closing mqttClient");
