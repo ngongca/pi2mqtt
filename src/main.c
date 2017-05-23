@@ -386,8 +386,7 @@ main(int argc, char** argv)
 
     //init RAVEn
     for (i = 0; i < ravenPorts.size; i++) {
-        ravenPort = ravenPorts.ports[i];
-        if (RAVEn_openPort(&ravenPort) != RAVEN_PASS) {
+        if (RAVEn_openPort(&ravenPorts.ports[i]) != RAVEN_PASS) {
             WriteDBGLog("Error opening RAVEn Port");
             exit(EXIT_FAILURE);
         }
