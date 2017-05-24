@@ -51,7 +51,7 @@ RAVEn_sendCmd(raven_t rvn, char const *cmd)
     WriteDBGLog(cmdbuffer);
     len = write(rvn.FD, cmdbuffer, cmdlen);
     if (len != cmdlen) {
-        snprintf(buf, sizeof (buf), "Error writing Command to RAVEn port, length %d != %d", len, cmdlen);
+        snprintf(buf, sizeof (buf), "RAVEn: Error writing Command to RAVEn port, length %d != %d", len, cmdlen);
         WriteDBGLog(buf);
         return ( RAVEN_FAIL);
     }
@@ -85,24 +85,24 @@ RAVEn_openPort(raven_t *raven_ptr)
 {
     char buf[128];
 
-    snprintf(buf, sizeof (buf), "Opening port [%s]", raven_ptr->path);
+    snprintf(buf, sizeof (buf), "RAVEn: Opening port [%s]", raven_ptr->path);
     WriteDBGLog(buf);
     raven_ptr->FD = open(raven_ptr->path, O_RDWR);
     if (raven_ptr->FD == -1) // if open is unsucessful
     {
-        snprintf(buf, sizeof (buf), "open_port: Unable to open %s. 0x%0x - %s\n", raven_ptr->path, errno, strerror(errno));
+        snprintf(buf, sizeof (buf), "RAVEn open_port: Unable to open %s. 0x%0x - %s\n", raven_ptr->path, errno, strerror(errno));
         WriteDBGLog(buf);
         perror(buf);
         return ( RAVEN_FAIL);
     } else {
         raven_ptr->FH = fdopen(raven_ptr->FD, "r");
         if (raven_ptr->FH == NULL) {
-            snprintf(buf, sizeof (buf), "open_port: Unable to open %s. 0x%0x - %s\n", raven_ptr->path, errno, strerror(errno));
+            snprintf(buf, sizeof (buf), "RAVEn open_port: Unable to open %s. 0x%0x - %s\n", raven_ptr->path, errno, strerror(errno));
             WriteDBGLog(buf);
             perror(buf);
             return ( RAVEN_FAIL);
         }
-        WriteDBGLog("Port is open, both File Descriptor and File Handle");
+        WriteDBGLog("RAVEn: Port is open, both File Descriptor and File Handle");
     }
     return (RAVEN_PASS);
 } //open_port
@@ -110,7 +110,7 @@ RAVEn_openPort(raven_t *raven_ptr)
 void 
 RAVEn_closePort(raven_t rvn) 
 {
-    WriteDBGLog("Closing RAVEn Port");
+    WriteDBGLog("RAVEn: Closing Port");
     fclose(rvn.FH);
     close(rvn.FD);
 }
@@ -176,14 +176,14 @@ RAVEn_getData(raven_t rvn, raven_data_t *rvnData_ptr)
     int xmlBufLen;
     
     retval = RAVEN_FAIL;
-    WriteDBGLog("Starting to PROCESS input");
+    WriteDBGLog("RAVEn: Starting to PROCESS input");
     xmlBufLen=0;
     memset(readBuf, 0, sizeof ( readBuf));
     while ((fgets(readBuf, sizeof ( readBuf), rvn.FH)) > 0) {
         rblen = strlen(readBuf);
         /* If Current buffer size + new Buffer being added is over the total buffer size BAD overflow */
         if ((xmlBufLen + rblen) > 10*1024) {
-            WriteDBGLog("Error BUFFER OVERFLOW");
+            WriteDBGLog("RAVEn: Error BUFFER OVERFLOW");
             WriteDBGLog(xmlBuf);
             WriteDBGLog(readBuf);
             break;

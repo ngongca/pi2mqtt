@@ -31,7 +31,8 @@ EOF
     do
       if [ -d $x ];
       then
-        echo '# specific sensor data that is connected to the controller device\n type and title.' >> template.conf
+        echo '# specific sensor data that is connected to the controller device
+        echo "# type and title.' >> template.conf
         echo "ds18b20 sensor$y {" >> template.conf
         echo " address = \"$x\"" >> template.conf
         echo " mqttpubtopic = \"home/$y/temp\"" >> template.conf
@@ -68,6 +69,14 @@ EOF1
 # pin = 4
 # mqttpubtopic = "home/dht22"
 # isfahrenheit = 1
+#}
+
+# uncomment next series if you wish to monitor door switches.  You can have
+# multiple switches, just provide different names and topics.  You must also
+# provide the wiringPi pin number.
+#doorswitch door1 {
+# pin = ?
+# mqttpubtopic = "home/door1"
 #}
 
 # the log file name that will be created if -v or debug mode is set
