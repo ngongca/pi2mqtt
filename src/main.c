@@ -348,7 +348,7 @@ ProcessDoorswitchData(doorswitch_port_t doorswitch, MQTTClient mqttClient)
 
     WriteDBGLog("Starting to PROCESS door switch input");
     if ((read_doorswitch_dat(doorswitch, &data)) == DOORSWITCH_SUCCESS) {
-        snprintf(mqttPayload, sizeof (mqttPayload), "{\"switch state\":{\"timestamp\":%ld,\"value\":\"%s\"}}", data.timestamp, data.is_open == 1 ? "open" : "closed");
+        snprintf(mqttPayload, sizeof (mqttPayload), "{\"switchstate\":{\"timestamp\":%ld,\"value\":\"%s\"}}", data.timestamp, data.is_open == 1 ? "open" : "closed");
         snprintf(topic, sizeof (topic), "%s", doorswitch.topic);
         snprintf(dbgBuf, sizeof (dbgBuf), "Topic %s Payload %s", topic, mqttPayload);
         WriteDBGLog(dbgBuf);
