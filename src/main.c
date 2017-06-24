@@ -54,10 +54,14 @@
 #define QOS          1
 #define TIMEOUT      10000L
 
-#define MQTTPASSWORD "piiot"
-#define MQTTUSER "mqttpi"
-
 #define MAXPORTS 32
+
+typedef struct {
+	char* mqttpasswd;
+	char* mqttuid;
+	char* mqtthostaddr;
+	char* mqttclientid;
+} mqtt_broker_t;
 
 typedef struct {
     int killed; // flag to kill loop
@@ -165,6 +169,8 @@ read_config(char config_filename[])
     static cfg_opt_t opts[] = {
         CFG_INT("delay", 5, CFGF_NONE),
         CFG_STR("mqttbrokeraddress", "localhost", CFGF_NONE),
+		CFG_STR("mqttbrokeruid", "mqttpi", CFGF_NONE),
+		CFG_STR("mqttbrokerpwd", "piiot", CFGF_NONE),
         CFG_STR("mqttsubtopic", "home/+/manage", CFGF_NONE),
         CFG_STR("clientid", "id", CFGF_NONE),
         CFG_STR("debuglogfile", "./debug.log", CFGF_NONE),
@@ -188,7 +194,8 @@ read_config(char config_filename[])
  * TODO: build a parser to read XML file at setup.
  */
 static void
-LoadINIParms(cfg_t **config, ds18b20pi_ports_t *sensors, raven_ports_t *raven, dht22_ports_t *dht22p, doorswitch_ports_t *doorswitch, MQTTClient *client, char configFile[]) 
+LoadINIParms(cfg_t **config, ds18b20pi_ports_t *sensors, raven_ports_t *raven, dht22_ports_t *dht22p,
+		doorswitch_ports_t *doorswitch, mqtt_broker_t *client, char configFile[])
 {
     int i;
     cfg_t *scfg;
@@ -224,14 +231,11 @@ LoadINIParms(cfg_t **config, ds18b20pi_ports_t *sensors, raven_ports_t *raven, d
             doorswitch->size++;
         }
     }
-    if (MQTTClient_create(client, cfg_getstr(*config, "mqttbrokeraddress"), 
-            cfg_getstr(*config, "clientid"), MQTTCLIENT_PERSISTENCE_NONE, NULL) != MQTTCLIENT_SUCCESS) {
-        for (i = 0; i < sensors->size; i++) {
-            DS18B20PI_closePort(sensors->ports[i]);
-        };
-        snprintf(buf, sizeof (buf), "Could not create MQTT Client at %s", cfg_getstr(*config, "mqttbrokeraddress"));
-        exit(-1);
-    }
+    client->mqtthostaddr = cfg_getstr(*config, "mqttbrokeraddress");
+    client->mqttclientid = cfg_getstr(*config, "clientid");
+    client->mqttuid = cfg_getstr(*config, "mqttbrokeruid");
+    client->mqttpasswd = cfg_getstr(*config, "mqttbrokerpwd");
+
 }
 
 /**
@@ -374,6 +378,7 @@ main(int argc, char** argv)
     raven_ports_t ravenPorts;
     dht22_ports_t dht22Ports;
     doorswitch_ports_t doorswitchPorts;
+    mqtt_broker_t mclient;
     MQTTClient mqttClient;
     MQTTClient_connectOptions conn_opts = MQTTClient_connectOptions_initializer;
     my_context_t my_context;
@@ -408,18 +413,30 @@ main(int argc, char** argv)
         }
     }
 
-    LoadINIParms(&cfg, &sensorPorts, &ravenPorts, &dht22Ports, &doorswitchPorts, &mqttClient, configFile); // Initialize ports.
+    LoadINIParms(&cfg, &sensorPorts, &ravenPorts, &dht22Ports, &doorswitchPorts, &mclient, configFile); // Initialize ports.
+
     InitDBGLog("pi2MQTT", cfg_getstr(cfg, "debuglogfile"), cfg_getint(cfg, "debugmode"), verbose);
     WriteDBGLog(STARTUP);
 
     my_context.killed = 0;
+
+    // set up MQTT host connection
+    if (MQTTClient_create(&mqttClient, mclient.mqtthostaddr,
+                mclient.mqttclientid, MQTTCLIENT_PERSISTENCE_NONE, NULL) != MQTTCLIENT_SUCCESS) {
+            for (i = 0; i < sensorPorts.size; i++) {
+                DS18B20PI_closePort(sensorPorts.ports[i]);
+            };
+            snprintf(buf, sizeof (buf), "Could not create MQTT Client at %s uid %s password: %s", mclient.mqtthostaddr, mclient.mqttuid, mclient.mqttpasswd);
+            WriteDBGLog(buf);
+            exit(-1);
+        }
     MQTTClient_setCallbacks(mqttClient, &my_context, connlost, msgarrvd, delivered);
     conn_opts.keepAliveInterval = 20;
     conn_opts.cleansession = 1;
-    conn_opts.password = MQTTPASSWORD;
-    conn_opts.username = MQTTUSER;
+    conn_opts.password = mclient.mqttpasswd;
+    conn_opts.username = mclient.mqttuid;
     if ((rc = MQTTClient_connect(mqttClient, &conn_opts)) != MQTTCLIENT_SUCCESS) {
-        snprintf(buf, sizeof (buf), "Failed to connect, return code %d", rc);
+        snprintf(buf, sizeof (buf), "Failed to connect user: %s, password: %s, return code %d", conn_opts.username, conn_opts.password, rc);
         WriteDBGLog(buf);
         exit(EXIT_FAILURE);
     }

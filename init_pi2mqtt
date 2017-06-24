@@ -19,6 +19,12 @@ clientid = client$RANDOM
 #mqtt broker address
 mqttbrokeraddress = "localhost"
 
+#mqtt broker uid
+mqttbrokeruid = "mqttpi"
+
+#mqtt broker uid password
+mqttbrokerpwd = "password"
+
 # topic for the sensor controller's management port.  
 # This will be monitored to provide management messages back to the controller.
 mqttsubtopic = "home/+/manage"
