@@ -30,6 +30,7 @@
 #include <errno.h>
 #include <fcntl.h>
 #include "raven.h"
+#include "debug.h"
 
 /**
  * Send command to RAVEn device
