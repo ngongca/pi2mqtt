@@ -27,23 +27,24 @@
 extern "C" {
 #endif
 
+#include "mqtt.h"
+
     typedef struct {
         FILE *FH; //file handle for port
         char path[128]; // fully qualified path to device
         char id[64]; // id of device
-        char topic[128]; // fully qualified topic
+        char topic[64]; // final topic to publish
+        char location[64]; // location data
+        int sampletime; // time in seconds to sample this sensor
         int fahrenheitscale; // 1 if Fahrenheit, 0 if Celsius 
     } DS18B20PI_port_t;
 
-    typedef struct {
-        float temperature; // temperature
-        time_t timestamp; // timestamp of data
-    } DS18B20PI_data_t;
-
-    extern DS18B20PI_port_t DS18B20PI_createPort(const char *, const char *, const char *, int);
+    extern DS18B20PI_port_t DS18B20PI_createPort(const char *, const char *,
+            const char *, const int, const char *, const int);
     extern int DS18B20PI_openPort(DS18B20PI_port_t *);
     extern void DS18B20PI_closePort(DS18B20PI_port_t);
-    extern int DS18B20PI_getSensorTemp(DS18B20PI_port_t, DS18B20PI_data_t *);
+    extern int ProcessDS18B20PIData(DS18B20PI_port_t, mqtt_data_t *);
+
 
 #ifdef __cplusplus
 }

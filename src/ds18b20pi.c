@@ -36,14 +36,26 @@
 
 #include "ds18b20pi.h"
 #include "debug.h"
+#include "mqtt.h"
 
-DS18B20PI_port_t 
-DS18B20PI_createPort(const char *path, const char *id, const char *topic, int isFahrenheit)
-{
+/**
+ * Create a new port
+ * @param path - direct path to device including device number
+ * @param id - id used to uniquely identify sensor
+ * @param topic - final topic to post.  Typically "temp"
+ * @param sampletime - in milliseconds
+ * @param location - used for topic
+ * @param isFahrenheit - determines scale of data
+ * @return 
+ */
+DS18B20PI_port_t
+DS18B20PI_createPort(const char *path, const char *id, const char *topic, const int sampletime, const char *location, const int isFahrenheit) {
     DS18B20PI_port_t port;
     strncpy(port.id, id, sizeof (port.id));
     strncpy(port.path, path, sizeof (port.path));
-    strncpy(port.topic, topic, sizeof (port.topic));
+    snprintf(port.topic, sizeof (port.topic), "home/%s/%s/%s", id, location, topic);
+    strncpy(port.location, location, sizeof (port.location));
+    port.sampletime = sampletime;
     port.fahrenheitscale = isFahrenheit;
     return (port);
 }
@@ -54,9 +66,8 @@ DS18B20PI_createPort(const char *path, const char *id, const char *topic, int is
  * @param location - device directory where the sensor file will be found, ex. /sys/bus/w1/devices
  * @return DS18B20PI_SUCCESS or _FAILURE
  */
-int 
-DS18B20PI_openPort(DS18B20PI_port_t *port) 
-{
+int
+DS18B20PI_openPort(DS18B20PI_port_t *port) {
     char dbgBuf[512];
     char fullPath[512];
     int rc;
@@ -82,59 +93,65 @@ DS18B20PI_openPort(DS18B20PI_port_t *port)
  * 
  * @param port
  */
-void 
-DS18B20PI_closePort(DS18B20PI_port_t port) 
-{
+void
+DS18B20PI_closePort(DS18B20PI_port_t port) {
     WriteDBGLog("Closing DS18B20 Port");
     fclose(port.FH);
 } // ClosePort()
 
 /**
- * Get temperature from the DS18B20 connected to the pi
- * @param port - DS18B20PI_port that is the port to read
- * @param data - DS18B20PI_data that will contain information read, temperature in F or C
- * @return - DS18B20PI_SUCCESS if read was successful, DS18B20PI_FAILURE if not.
+ * Process data from this ds18b20 sensor and return the data
+ * @param sensorPort to process
+ * @param message will contain the topic and payload for this sensor read
+ * @return DS18B20PI_SUCCESS if successful, DS18B20PI_FAILURE otherwise
  */
-int 
-DS18B20PI_getSensorTemp(DS18B20PI_port_t port, DS18B20PI_data_t *data_ptr) 
-{
+int
+ProcessDS18B20PIData(DS18B20PI_port_t port, mqtt_data_t *message) {
+    int rc;
     char *value;
-    int retval;
+    char dbgBuf[1024];
     char readBuf[512];
-    char dbgBuf[512];
+    float temp;
     int i;
 
-    retval = DS18B20PI_FAILURE;
-    memset(readBuf, 0, sizeof ( readBuf));
-    if (fgets(readBuf, sizeof (readBuf), port.FH) > 0) {
-        if (strstr(readBuf, "YES") != NULL) {
-            if (fgets(readBuf, sizeof (readBuf), port.FH) > 0) {
-                //Extract temp data an if Fahrenheit, convert
-                if (strtok(readBuf, "\nt=") != NULL) {
-                    value = strtok(NULL, "\nt=");
-                    if (value != NULL && sscanf(value, "%d", &i) != 0) {
-                        if (port.fahrenheitscale == 1) {
-                            data_ptr->temperature = i / 1000.0 * 9.0 / 5.0 + 32.0;
+    rc = DS18B20PI_FAILURE;
+    if (DS18B20PI_openPort(&port) != DS18B20PI_SUCCESS) {
+        WriteDBGLog("Error opening DS18B20 port");
+    } else {
+        memset(readBuf, 0, sizeof ( readBuf));
+        if (fgets(readBuf, sizeof (readBuf), port.FH) > 0) {
+            if (strstr(readBuf, "YES") != NULL) {
+                if (fgets(readBuf, sizeof (readBuf), port.FH) > 0) {
+                    //Extract temp data an if Fahrenheit, convert
+                    if (strtok(readBuf, "\nt=") != NULL) {
+                        value = strtok(NULL, "\nt=");
+                        if (value != NULL && sscanf(value, "%d", &i) != 0) {
+                            if (port.fahrenheitscale == 1) {
+                                temp = i / 1000.0 * 9.0 / 5.0 + 32.0;
+                            } else {
+                                temp = i / 1000.0;
+                            }
+                            snprintf(message->payload, sizeof (message->payload), "{\"timestamp\":%ld,\"value\":%.3f}", time(NULL), temp);
+                            strncpy(message->topic, port.topic, sizeof (message->topic));
+                            snprintf(dbgBuf, sizeof (dbgBuf), "Set up payload to %s", message->payload);
+                            WriteDBGLog(dbgBuf);
+                            rc = DS18B20PI_SUCCESS;
                         } else {
-                            data_ptr->temperature = i / 1000.0;
+                            WriteDBGLog("No temp scanned");
                         }
-                        data_ptr->timestamp = time(NULL);
-                        retval = DS18B20PI_SUCCESS;
-                        snprintf(dbgBuf, sizeof (dbgBuf), "Extracted temperature is %.2f at timestamp %lu", data_ptr->temperature, data_ptr->timestamp);
-                        WriteDBGLog(dbgBuf);
                     } else {
-                        WriteDBGLog("No temp scanned");
+                        WriteDBGLog("no number scanned");
                     }
-                } else {
-                    WriteDBGLog("no number scanned");
                 }
+            } else {
+                snprintf(dbgBuf, sizeof (dbgBuf), "Bad temp reading CRC Check failed on %s", readBuf);
+                WriteDBGLog(dbgBuf);
             }
         } else {
-            snprintf(dbgBuf, sizeof (dbgBuf), "Bad temp reading CRC Check failed on %s", readBuf);
-            WriteDBGLog(dbgBuf);
+            WriteDBGLog("No data Read");
         }
-    } else {
-        WriteDBGLog("No data Read");
+        DS18B20PI_closePort(port);
+        return (rc);
     }
-    return retval;
 }
+

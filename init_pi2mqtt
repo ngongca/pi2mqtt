@@ -30,18 +30,33 @@ mqttbrokerpwd = "password"
 mqttsubtopic = "home/+/manage"
 
 EOF
+
   if [ -d /sys/bus/w1/devices ];
   then
+    cat << EOF4 >> template.conf
+# Below are detected one-wire devices.  If you wish to enable them, update
+# the parameters and remove the comment lines.
+# Parameters are as follows:
+#   address - this is the device directory that was detected for this sensor.
+#   location - this is a text field that gives a geographical location for this
+#              sensor.  Best not to use spaces as this is part of the topic that
+#              is published
+#   mqttpubtopic - last level topic for this sensor.  Typically 'temp'
+#   sampletime - time in seconds to sample this sensor. Will be sampled at this
+#              interval or greater.
+#   isfahrenheit - flag to determine the value of temperature to publish
+
+EOF4
     y=0
     for x in /sys/bus/w1/devices/28*
     do
       if [ -d $x ];
       then
-        echo '# specific sensor data that is connected to the controller device
-        echo "# type and title.' >> template.conf
         echo "ds18b20 sensor$y {" >> template.conf
         echo " address = \"$x\"" >> template.conf
-        echo " mqttpubtopic = \"home/$y/temp\"" >> template.conf
+        echo " location = \"location\"" >> template.conf
+        echo " mqttpubtopic = \"temp\"" >> template.conf
+        echo " sampletime = 1" >> template.conf
         echo " isfahrenheit = 1" >> template.conf
         echo "}" >> template.conf
         echo " " >> template.conf

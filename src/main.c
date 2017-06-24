@@ -35,8 +35,8 @@
 #include <errno.h>
 #include <err.h>
 #include <time.h>
-#include <utime.h>
-#include <unistd.h>
+//#include <utime.h>
+//#include <unistd.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
@@ -48,20 +48,13 @@
 #include "dht22.h"
 #include "raven.h"
 #include "doorswitch.h"
+#include "mqtt.h"
 
 #define STARTUP "\n\npi2mqtt - \nVersion 0.1 Mar 28, 2017\nRead sensors from RPI and publish data to mqtt\r\n\r\n"
 
 #define QOS          1
 #define TIMEOUT      10000L
 
-#define MAXPORTS 32
-
-typedef struct {
-	char* mqttpasswd;
-	char* mqttuid;
-	char* mqtthostaddr;
-	char* mqttclientid;
-} mqtt_broker_t;
 
 typedef struct {
     int killed; // flag to kill loop
@@ -70,6 +63,7 @@ typedef struct {
 typedef struct {
     int size;
     DS18B20PI_port_t ports[MAXPORTS];
+    long lastsample[MAXPORTS];
 } ds18b20pi_ports_t;
 
 typedef struct {
@@ -96,16 +90,14 @@ char gCmdBuffer[1024 * 5];
 int gCmdBufferLen;
 
 void
-delivered(void *context, MQTTClient_deliveryToken dt) 
-{
+delivered(void *context, MQTTClient_deliveryToken dt) {
     char buf[128];
     snprintf(buf, sizeof (buf), "Message with token value %d delivery confirmed", dt);
     WriteDBGLog(buf);
 }
 
 int
-msgarrvd(void *context, char *topicName, int topicLen, MQTTClient_message *message) 
-{
+msgarrvd(void *context, char *topicName, int topicLen, MQTTClient_message *message) {
     char buf[128];
     char msg[128];
     my_context_t *c = (my_context_t *) context;
@@ -131,19 +123,19 @@ msgarrvd(void *context, char *topicName, int topicLen, MQTTClient_message *messa
 }
 
 void
-connlost(void *context, char *cause) 
-{
+connlost(void *context, char *cause) {
     printf("\nConnection lost\n");
     printf("     cause: %s\n", cause);
 }
 
 static cfg_t *
-read_config(char config_filename[]) 
-{
+read_config(char config_filename[]) {
     cfg_t *cfg;
     static cfg_opt_t ds18b20_opts[] = {
         CFG_STR("address", "/sys/bus/w1/devices", CFGF_NONE),
-        CFG_STR("mqttpubtopic", "home/device/temp", CFGF_NONE),
+        CFG_STR("mqttpubtopic", "temp", CFGF_NONE),
+        CFG_INT("sampletime", 5, CFGF_NONE),
+        CFG_STR("location", "location", CFGF_NONE),
         CFG_INT("isfahrenheit", 1, CFGF_NONE),
         CFG_END()
     };
@@ -159,7 +151,7 @@ read_config(char config_filename[])
         CFG_INT("isfahrenheit", 1, CFGF_NONE),
         CFG_END()
     };
-    
+
     static cfg_opt_t doorswitch_opts[] = {
         CFG_INT("pin", 1, CFGF_NONE),
         CFG_STR("mqttpubtopic", "home/door", CFGF_NONE),
@@ -167,10 +159,10 @@ read_config(char config_filename[])
     };
 
     static cfg_opt_t opts[] = {
-        CFG_INT("delay", 5, CFGF_NONE),
+        CFG_INT("delay", 1000, CFGF_NONE),
         CFG_STR("mqttbrokeraddress", "localhost", CFGF_NONE),
-		CFG_STR("mqttbrokeruid", "mqttpi", CFGF_NONE),
-		CFG_STR("mqttbrokerpwd", "piiot", CFGF_NONE),
+        CFG_STR("mqttbrokeruid", "mqttpi", CFGF_NONE),
+        CFG_STR("mqttbrokerpwd", "piiot", CFGF_NONE),
         CFG_STR("mqttsubtopic", "home/+/manage", CFGF_NONE),
         CFG_STR("clientid", "id", CFGF_NONE),
         CFG_STR("debuglogfile", "./debug.log", CFGF_NONE),
@@ -195,8 +187,7 @@ read_config(char config_filename[])
  */
 static void
 LoadINIParms(cfg_t **config, ds18b20pi_ports_t *sensors, raven_ports_t *raven, dht22_ports_t *dht22p,
-		doorswitch_ports_t *doorswitch, mqtt_broker_t *client, char configFile[])
-{
+        doorswitch_ports_t *doorswitch, mqtt_broker_t *client, char configFile[]) {
     int i;
     cfg_t *scfg;
     char buf[64];
@@ -206,7 +197,12 @@ LoadINIParms(cfg_t **config, ds18b20pi_ports_t *sensors, raven_ports_t *raven, d
     for (i = 0; i < cfg_size(*config, "ds18b20"); i++) {
         if (i < MAXPORTS) {
             scfg = cfg_getnsec(*config, "ds18b20", i);
-            sensors->ports[i] = DS18B20PI_createPort(cfg_getstr(scfg, "address"), cfg_title(scfg), cfg_getstr(scfg, "mqttpubtopic"), cfg_getint(scfg, "isfahrenheit"));
+            sensors->ports[i] = DS18B20PI_createPort(cfg_getstr(scfg, "address"),
+                    cfg_title(scfg), cfg_getstr(scfg, "mqttpubtopic"),
+                    cfg_getint(scfg, "sampletime"),
+                    cfg_getstr(scfg, "location"),
+                    cfg_getint(scfg, "isfahrenheit"));
+            sensors->lastsample[i] = 0;
             sensors->size++;
         }
     }
@@ -220,7 +216,7 @@ LoadINIParms(cfg_t **config, ds18b20pi_ports_t *sensors, raven_ports_t *raven, d
     for (i = 0; i < cfg_size(*config, "dht22"); i++) {
         if (i < MAXPORTS) {
             scfg = cfg_getnsec(*config, "dht22", i);
-            dht22p->ports[i] = dht22_createPort(cfg_getint(scfg, "pin"), cfg_title(scfg), cfg_getstr(scfg, "mqttpubtopic"),  cfg_getint(scfg, "isfahrenheit"));
+            dht22p->ports[i] = dht22_createPort(cfg_getint(scfg, "pin"), cfg_title(scfg), cfg_getstr(scfg, "mqttpubtopic"), cfg_getint(scfg, "isfahrenheit"));
             dht22p->size++;
         }
     }
@@ -246,8 +242,7 @@ LoadINIParms(cfg_t **config, ds18b20pi_ports_t *sensors, raven_ports_t *raven, d
  * @return 
  */
 static int
-mqttSendData(MQTTClient mqttClient, char *payload, char *topic) 
-{
+mqttSendData(MQTTClient mqttClient, char *payload, char *topic) {
     MQTTClient_message pubmsg = MQTTClient_message_initializer;
     MQTTClient_deliveryToken token;
     char dbgBuf[256];
@@ -267,32 +262,38 @@ mqttSendData(MQTTClient mqttClient, char *payload, char *topic)
     WriteDBGLog(dbgBuf);
 }
 
+/**
+ * 
+ * @param mqttClient
+ * @param payload
+ * @param topic
+ * @return 
+ */
 static int
-ProcessDS18B20PIData(DS18B20PI_port_t sensorPort, MQTTClient mqttClient) 
-{
+mqttSend_Data(MQTTClient mqttClient, mqtt_data_t *message) {
+    MQTTClient_message pubmsg = MQTTClient_message_initializer;
+    MQTTClient_deliveryToken token;
+    char dbgBuf[256];
     int rc;
-    DS18B20PI_data_t data;
-
-    char mqttPayload[1024];
-    char dbgBuf[1024];
-
-    rc = 0;
-    WriteDBGLog("Starting to PROCESS input");
-    if ((rc = DS18B20PI_getSensorTemp(sensorPort, &data)) == DS18B20PI_SUCCESS) {
-        snprintf(mqttPayload, sizeof (mqttPayload), "{\"temperature\":{\"timestamp\":%ld,\"value\":%.3f}}", data.timestamp, data.temperature);
-        snprintf(dbgBuf, sizeof (dbgBuf), "Sending payload %s", mqttPayload);
-        WriteDBGLog(dbgBuf);
-        rc = mqttSendData(mqttClient, mqttPayload, sensorPort.topic);
-    } else {
-        WriteDBGLog("Failed to read temperature sensor");
-        rc = 0;
-    }
-    return (rc);
+    pubmsg.payload = message->payload;
+    pubmsg.payloadlen = strlen(message->payload);
+    pubmsg.qos = QOS;
+    pubmsg.retained = 0;
+    snprintf(dbgBuf, sizeof (dbgBuf), "publishing - %s", message->payload);
+    WriteDBGLog(dbgBuf);
+    MQTTClient_publishMessage(mqttClient, message->topic, &pubmsg, &token);
+    snprintf(dbgBuf, sizeof (dbgBuf), "Waiting for up to %d seconds for publication of %s on topic %s",
+            (int) (TIMEOUT / 1000), message->payload, message->topic);
+    WriteDBGLog(dbgBuf);
+    rc = MQTTClient_waitForCompletion(mqttClient, token, TIMEOUT);
+    snprintf(dbgBuf, sizeof (dbgBuf), "Message with delivery token %d delivered", token);
+    WriteDBGLog(dbgBuf);
 }
 
+
+
 static int
-ProcessRAVEnData(raven_t rvn, MQTTClient mqttClient) 
-{
+ProcessRAVEnData(raven_t rvn, MQTTClient mqttClient) {
     raven_data_t data;
 
     char mqttPayload[1024];
@@ -312,8 +313,7 @@ ProcessRAVEnData(raven_t rvn, MQTTClient mqttClient)
 }
 
 static int
-ProcessDHT22Data(dht22_port_t dht22, MQTTClient mqttClient) 
-{
+ProcessDHT22Data(dht22_port_t dht22, MQTTClient mqttClient) {
     dht22_data_t data;
 
     char mqttPayload[1024];
@@ -326,7 +326,7 @@ ProcessDHT22Data(dht22_port_t dht22, MQTTClient mqttClient)
         snprintf(topic, sizeof (topic), "%s/temperature", dht22.topic);
         snprintf(dbgBuf, sizeof (dbgBuf), "Topic %s Payload %s", topic, mqttPayload);
         WriteDBGLog(dbgBuf);
-        
+
         mqttSendData(mqttClient, mqttPayload, topic);
 
         snprintf(mqttPayload, sizeof (mqttPayload), "{\"humidity\":{\"timestamp\":%ld,\"value\":%.3f}}", data.timestamp, data.humidity);
@@ -342,8 +342,7 @@ ProcessDHT22Data(dht22_port_t dht22, MQTTClient mqttClient)
 }
 
 static int
-ProcessDoorswitchData(doorswitch_port_t doorswitch, MQTTClient mqttClient) 
-{
+ProcessDoorswitchData(doorswitch_port_t doorswitch, MQTTClient mqttClient) {
     doorswitch_data_t data;
 
     char mqttPayload[1024];
@@ -356,7 +355,7 @@ ProcessDoorswitchData(doorswitch_port_t doorswitch, MQTTClient mqttClient)
         snprintf(topic, sizeof (topic), "%s", doorswitch.topic);
         snprintf(dbgBuf, sizeof (dbgBuf), "Topic %s Payload %s", topic, mqttPayload);
         WriteDBGLog(dbgBuf);
-        
+
         mqttSendData(mqttClient, mqttPayload, topic);
 
     } else {
@@ -367,8 +366,7 @@ ProcessDoorswitchData(doorswitch_port_t doorswitch, MQTTClient mqttClient)
 }
 
 int
-main(int argc, char** argv) 
-{
+main(int argc, char** argv) {
     int c;
     int rc;
     int i;
@@ -382,6 +380,11 @@ main(int argc, char** argv)
     MQTTClient mqttClient;
     MQTTClient_connectOptions conn_opts = MQTTClient_connectOptions_initializer;
     my_context_t my_context;
+    mqtt_data_t message;
+    struct timespec delay;
+    
+    delay.tv_nsec = 1000000;
+    delay.tv_sec = 0;
 
     sensorPorts.size = 0;
     ravenPorts.size = 0;
@@ -422,14 +425,14 @@ main(int argc, char** argv)
 
     // set up MQTT host connection
     if (MQTTClient_create(&mqttClient, mclient.mqtthostaddr,
-                mclient.mqttclientid, MQTTCLIENT_PERSISTENCE_NONE, NULL) != MQTTCLIENT_SUCCESS) {
-            for (i = 0; i < sensorPorts.size; i++) {
-                DS18B20PI_closePort(sensorPorts.ports[i]);
-            };
-            snprintf(buf, sizeof (buf), "Could not create MQTT Client at %s uid %s password: %s", mclient.mqtthostaddr, mclient.mqttuid, mclient.mqttpasswd);
-            WriteDBGLog(buf);
-            exit(-1);
-        }
+            mclient.mqttclientid, MQTTCLIENT_PERSISTENCE_NONE, NULL) != MQTTCLIENT_SUCCESS) {
+        for (i = 0; i < sensorPorts.size; i++) {
+            DS18B20PI_closePort(sensorPorts.ports[i]);
+        };
+        snprintf(buf, sizeof (buf), "Could not create MQTT Client at %s uid %s password: %s", mclient.mqtthostaddr, mclient.mqttuid, mclient.mqttpasswd);
+        WriteDBGLog(buf);
+        exit(-1);
+    }
     MQTTClient_setCallbacks(mqttClient, &my_context, connlost, msgarrvd, delivered);
     conn_opts.keepAliveInterval = 20;
     conn_opts.cleansession = 1;
@@ -461,21 +464,24 @@ main(int argc, char** argv)
     }
 
     while (!my_context.killed) {
-        if (cfg_getint(cfg, "delay") <= cntr) {
-            for (i = 0; i < sensorPorts.size; i++) {
-                if (DS18B20PI_openPort(&sensorPorts.ports[i]) != DS18B20PI_SUCCESS) {
-                    WriteDBGLog("Error opening DS18B20 port");
-                    exit(EXIT_FAILURE);
+        for (i = 0; i < sensorPorts.size; i++) {
+            long t = time(NULL);
+            if (t - sensorPorts.lastsample[i] >= (long) sensorPorts.ports[i].sampletime) {
+                sensorPorts.lastsample[i] = t;
+                if (ProcessDS18B20PIData(sensorPorts.ports[i], &message) == DS18B20PI_SUCCESS) {
+                    mqttSend_Data(mqttClient, &message);
+                } else {
+                    WriteDBGLog("Failed to read temperature sensor");
+                    rc = 0;
                 }
-                ProcessDS18B20PIData(sensorPorts.ports[i], mqttClient);
-                DS18B20PI_closePort(sensorPorts.ports[i]);
             }
-
+        }
+        if (cfg_getint(cfg, "delay") <= cntr) {
             // process dht22
             for (i = 0; i < dht22Ports.size; i++) {
                 ProcessDHT22Data(dht22Ports.ports[i], mqttClient);
             }
-            
+
             // process door switches
             for (i = 0; i < doorswitchPorts.size; i++) {
                 ProcessDoorswitchData(doorswitchPorts.ports[i], mqttClient);
@@ -486,8 +492,11 @@ main(int argc, char** argv)
             ProcessRAVEnData(ravenPorts.ports[i], mqttClient);
         }
         cntr++;
-        sleep(1);
+        nanosleep(&delay, NULL);
+
     }
+    
+    
     for (i = 0; i < ravenPorts.size; i++) {
         RAVEn_closePort(ravenPorts.ports[i]);
     }
