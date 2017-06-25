@@ -31,34 +31,20 @@
 #include <stdlib.h>
 #include <stdarg.h>
 #include <getopt.h>
-#include "debug.h"
-#include <errno.h>
-#include <err.h>
 #include <time.h>
-//#include <utime.h>
-//#include <unistd.h>
-#include <sys/types.h>
-#include <sys/stat.h>
 #include <fcntl.h>
-#include <string.h>
+#include <err.h>
 
 #include <MQTTClient.h>
-#include "confuse.h"
+#include <confuse.h>
 #include "ds18b20pi.h"
 #include "dht22.h"
 #include "raven.h"
 #include "doorswitch.h"
 #include "mqtt.h"
+#include "debug.h"
 
 #define STARTUP "\n\npi2mqtt - \nVersion 0.1 Mar 28, 2017\nRead sensors from RPI and publish data to mqtt\r\n\r\n"
-
-#define QOS          1
-#define TIMEOUT      10000L
-
-
-typedef struct {
-    int killed; // flag to kill loop
-} my_context_t;
 
 typedef struct {
     int size;
@@ -89,45 +75,6 @@ char gTempDevPath[256];
 char gCmdBuffer[1024 * 5];
 int gCmdBufferLen;
 
-void
-delivered(void *context, MQTTClient_deliveryToken dt) {
-    char buf[128];
-    snprintf(buf, sizeof (buf), "Message with token value %d delivery confirmed", dt);
-    WriteDBGLog(buf);
-}
-
-int
-msgarrvd(void *context, char *topicName, int topicLen, MQTTClient_message *message) {
-    char buf[128];
-    char msg[128];
-    my_context_t *c = (my_context_t *) context;
-    int i;
-    char* payloadptr;
-    snprintf(buf, sizeof (buf), "Message arrived\n\ttopic: %s", topicName);
-    WriteDBGLog(buf);
-    payloadptr = message->payload;
-    for (i = 0; i < message->payloadlen && i<sizeof (msg); i++) {
-        msg[i] = *payloadptr++;
-    }
-    msg[i] = '\0';
-
-    snprintf(buf, sizeof (buf), "payload %s", msg);
-    WriteDBGLog(buf);
-    if (strstr(msg, "kill") != NULL) {
-        c->killed = 1;
-    }
-    WriteDBGLog("here");
-    MQTTClient_freeMessage(&message);
-    MQTTClient_free(topicName);
-    return 1;
-}
-
-void
-connlost(void *context, char *cause) {
-    printf("\nConnection lost\n");
-    printf("     cause: %s\n", cause);
-}
-
 static cfg_t *
 read_config(char config_filename[]) {
     cfg_t *cfg;
@@ -144,20 +91,17 @@ read_config(char config_filename[]) {
         CFG_STR("mqttpubtopic", "home/device/demand", CFGF_NONE),
         CFG_END()
     };
-
     static cfg_opt_t dht22_opts[] = {
         CFG_INT("pin", 1, CFGF_NONE),
         CFG_STR("mqttpubtopic", "home/device", CFGF_NONE),
         CFG_INT("isfahrenheit", 1, CFGF_NONE),
         CFG_END()
     };
-
     static cfg_opt_t doorswitch_opts[] = {
         CFG_INT("pin", 1, CFGF_NONE),
         CFG_STR("mqttpubtopic", "home/door", CFGF_NONE),
         CFG_END()
     };
-
     static cfg_opt_t opts[] = {
         CFG_INT("delay", 1000, CFGF_NONE),
         CFG_STR("mqttbrokeraddress", "localhost", CFGF_NONE),
@@ -233,63 +177,6 @@ LoadINIParms(cfg_t **config, ds18b20pi_ports_t *sensors, raven_ports_t *raven, d
     client->mqttpasswd = cfg_getstr(*config, "mqttbrokerpwd");
 
 }
-
-/**
- * 
- * @param mqttClient
- * @param payload
- * @param topic
- * @return 
- */
-static int
-mqttSendData(MQTTClient mqttClient, char *payload, char *topic) {
-    MQTTClient_message pubmsg = MQTTClient_message_initializer;
-    MQTTClient_deliveryToken token;
-    char dbgBuf[256];
-    int rc;
-    pubmsg.payload = payload;
-    pubmsg.payloadlen = strlen(payload);
-    pubmsg.qos = QOS;
-    pubmsg.retained = 0;
-    snprintf(dbgBuf, sizeof (dbgBuf), "publishing - %s", payload);
-    WriteDBGLog(dbgBuf);
-    MQTTClient_publishMessage(mqttClient, topic, &pubmsg, &token);
-    snprintf(dbgBuf, sizeof (dbgBuf), "Waiting for up to %d seconds for publication of %s on topic %s",
-            (int) (TIMEOUT / 1000), payload, topic);
-    WriteDBGLog(dbgBuf);
-    rc = MQTTClient_waitForCompletion(mqttClient, token, TIMEOUT);
-    snprintf(dbgBuf, sizeof (dbgBuf), "Message with delivery token %d delivered", token);
-    WriteDBGLog(dbgBuf);
-}
-
-/**
- * 
- * @param mqttClient
- * @param payload
- * @param topic
- * @return 
- */
-static int
-mqttSend_Data(MQTTClient mqttClient, mqtt_data_t *message) {
-    MQTTClient_message pubmsg = MQTTClient_message_initializer;
-    MQTTClient_deliveryToken token;
-    char dbgBuf[256];
-    int rc;
-    pubmsg.payload = message->payload;
-    pubmsg.payloadlen = strlen(message->payload);
-    pubmsg.qos = QOS;
-    pubmsg.retained = 0;
-    snprintf(dbgBuf, sizeof (dbgBuf), "publishing - %s", message->payload);
-    WriteDBGLog(dbgBuf);
-    MQTTClient_publishMessage(mqttClient, message->topic, &pubmsg, &token);
-    snprintf(dbgBuf, sizeof (dbgBuf), "Waiting for up to %d seconds for publication of %s on topic %s",
-            (int) (TIMEOUT / 1000), message->payload, message->topic);
-    WriteDBGLog(dbgBuf);
-    rc = MQTTClient_waitForCompletion(mqttClient, token, TIMEOUT);
-    snprintf(dbgBuf, sizeof (dbgBuf), "Message with delivery token %d delivered", token);
-    WriteDBGLog(dbgBuf);
-}
-
 
 
 static int
@@ -378,7 +265,6 @@ main(int argc, char** argv) {
     doorswitch_ports_t doorswitchPorts;
     mqtt_broker_t mclient;
     MQTTClient mqttClient;
-    MQTTClient_connectOptions conn_opts = MQTTClient_connectOptions_initializer;
     my_context_t my_context;
     mqtt_data_t message;
     struct timespec delay;
@@ -423,29 +309,12 @@ main(int argc, char** argv) {
 
     my_context.killed = 0;
 
-    // set up MQTT host connection
-    if (MQTTClient_create(&mqttClient, mclient.mqtthostaddr,
-            mclient.mqttclientid, MQTTCLIENT_PERSISTENCE_NONE, NULL) != MQTTCLIENT_SUCCESS) {
-        for (i = 0; i < sensorPorts.size; i++) {
-            DS18B20PI_closePort(sensorPorts.ports[i]);
-        };
-        snprintf(buf, sizeof (buf), "Could not create MQTT Client at %s uid %s password: %s", mclient.mqtthostaddr, mclient.mqttuid, mclient.mqttpasswd);
-        WriteDBGLog(buf);
-        exit(-1);
-    }
-    MQTTClient_setCallbacks(mqttClient, &my_context, connlost, msgarrvd, delivered);
-    conn_opts.keepAliveInterval = 20;
-    conn_opts.cleansession = 1;
-    conn_opts.password = mclient.mqttpasswd;
-    conn_opts.username = mclient.mqttuid;
-    if ((rc = MQTTClient_connect(mqttClient, &conn_opts)) != MQTTCLIENT_SUCCESS) {
-        snprintf(buf, sizeof (buf), "Failed to connect user: %s, password: %s, return code %d", conn_opts.username, conn_opts.password, rc);
-        WriteDBGLog(buf);
+    if (MQTT_init(&my_context, &mqttClient, &mclient)  == MQTT_FAILURE) {
         exit(EXIT_FAILURE);
     }
-    snprintf(buf, sizeof (buf), "Subscribing to topic %s for client %s using QoS%d", cfg_getstr(cfg, "mqttsubtopic"), cfg_getstr(cfg, "clientid"), QOS);
-    WriteDBGLog(buf);
-    MQTTClient_subscribe(mqttClient, cfg_getstr(cfg, "mqttsubtopic"), QOS);
+    
+    MQTT_sub(mqttClient, cfg_getstr(cfg, "mqttsubtopic"));
+    
     cntr = 0;
 
     //init RAVEn
