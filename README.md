@@ -1,9 +1,9 @@
-#pi2mqtt
+# pi2mqtt
 
 This tool monitors sensors connected to the Raspberry Pi.  The current sensors
 include:
 
-##Temp -  DS18B20
+## Temp -  DS18B20
 You can connect multiple DS18B20 sensors to pin 4 of the rpi.  Be sure to include a 4.7Kohm pull up.  The tools will scan for devices in the `/sys/bus/w1/devices` directory.  DS18B20 devices will have the prefix of _28-\*_.
 	
 For the sensor kernel module to be enabled, include the following line in the `/boot/config.txt` file
@@ -12,7 +12,7 @@ For the sensor kernel module to be enabled, include the following line in the `/
 ```
 Edit the file and include the above line, then reboot, and the device should be visible
 
-##Electric Demand - RAVEn
+## Electric Demand - RAVEn
 The **Rainforest RAVEn** device connect to the USB port on the rpi and can be used to read a smart electric meter in the home.  Currently, this works with San Diego Gas and Electric Meters to the best of the authors knowledge.
 
 To build the tools you will need to install the autotools suite.  For ubuntu:
