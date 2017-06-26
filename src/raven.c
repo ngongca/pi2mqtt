@@ -27,20 +27,19 @@
 #include <string.h>
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <unistd.h>
 #include <errno.h>
+#include <time.h>
 #include <fcntl.h>
 #include "raven.h"
 #include "debug.h"
+#include "mqtt.h"
 
-/**
- * Send command to RAVEn device
- * @param rvn - device descriptor
- * @param _cmd - command to send
- * @return - returns RAVEN_PASS if successful, RAVEN_FAIL if not.
- */
-int 
-RAVEn_sendCmd(raven_t rvn, char const *cmd)
-{
+static char xmlBuf[10 * 1024];
+
+
+int
+RAVEn_sendCmd(raven_t rvn, char const *cmd) {
     int len;
     char buf[256];
     char cmdbuffer[1024];
@@ -59,46 +58,36 @@ RAVEn_sendCmd(raven_t rvn, char const *cmd)
     return ( RAVEN_PASS);
 }
 
-/**
- * Initialize the raven_t descriptor
- * @param raven_ptr pointer to the descriptor to initialize
- * @param path full path to the location of the device
- * @param id name for identification
- * @param topic default publish topic for this descriptor
- */
-raven_t 
-RAVEn_create(const char *path, const char *id, const char *topic) 
-{
+
+raven_t
+RAVEn_create(const char *path, const char *id, const char *topic, const char *location) {
     raven_t raven;
     strncpy(raven.path, path, sizeof (raven.path));
     strncpy(raven.id, id, sizeof (raven.id));
     strncpy(raven.topic, topic, sizeof (raven.topic));
+    strncpy(raven.location, location, sizeof (raven.location));
     return raven;
 }
 
-/**
- * Open the RAVEn port for read and write access
- * @param raven_ptr
- * @return RAVEN_PASS if successful, RAVEN_FAIL if not.
- */
-int 
-RAVEn_openPort(raven_t *raven_ptr)
-{
+
+int
+RAVEn_openPort(raven_t *rvn) {
     char buf[128];
 
-    snprintf(buf, sizeof (buf), "RAVEn: Opening port [%s]", raven_ptr->path);
+    snprintf(buf, sizeof (buf), "RAVEn: Opening port [%s]", rvn->path);
     WriteDBGLog(buf);
-    raven_ptr->FD = open(raven_ptr->path, O_RDWR);
-    if (raven_ptr->FD == -1) // if open is unsucessful
+    rvn->FD = open(rvn->path, O_RDWR);
+    fcntl(rvn->FD, F_SETFL, FNDELAY); // Set to non blocking.
+    if (rvn->FD == -1) // if open is unsuccessful
     {
-        snprintf(buf, sizeof (buf), "RAVEn open_port: Unable to open %s. 0x%0x - %s\n", raven_ptr->path, errno, strerror(errno));
+        snprintf(buf, sizeof (buf), "RAVEn open_port: Unable to open %s. 0x%0x - %s\n", rvn->path, errno, strerror(errno));
         WriteDBGLog(buf);
         perror(buf);
         return ( RAVEN_FAIL);
     } else {
-        raven_ptr->FH = fdopen(raven_ptr->FD, "r");
-        if (raven_ptr->FH == NULL) {
-            snprintf(buf, sizeof (buf), "RAVEn open_port: Unable to open %s. 0x%0x - %s\n", raven_ptr->path, errno, strerror(errno));
+        rvn->FH = fdopen(rvn->FD, "r");
+        if (rvn->FH == NULL) {
+            snprintf(buf, sizeof (buf), "RAVEn open_port: Unable to open %s. 0x%0x - %s\n", rvn->path, errno, strerror(errno));
             WriteDBGLog(buf);
             perror(buf);
             return ( RAVEN_FAIL);
@@ -108,22 +97,21 @@ RAVEn_openPort(raven_t *raven_ptr)
     return (RAVEN_PASS);
 } //open_port
 
-void 
-RAVEn_closePort(raven_t rvn) 
-{
+void
+RAVEn_closePort(raven_t rvn) {
     WriteDBGLog("RAVEn: Closing Port");
     fclose(rvn.FH);
     close(rvn.FD);
 }
+
 /**
  * 
  * @param buffer
  * @param data_ptr
  * @return RAVEN_PASS if there was a match and data is good, RAVEN_FAIL otherwise.
  */
-static int 
-RAVEn_parseXML(char buffer[], raven_data_t *data_ptr) 
-{
+static int
+RAVEn_parseXML(char buffer[], raven_data_t *data_ptr) {
     char* p;
     int demand;
     uint demand_u;
@@ -140,7 +128,7 @@ RAVEn_parseXML(char buffer[], raven_data_t *data_ptr)
                 demand = demand_u;
                 if (demand >= 2^23) demand = demand - 2^24;
             } else if (strcmp(p, "DeviceMacId") == 0) {
-                strncpy(data_ptr->macid, strtok(NULL, "<>\n"), sizeof(data_ptr->macid));
+                strncpy(data_ptr->macid, strtok(NULL, "<>\n"), sizeof (data_ptr->macid));
             } else if (strcmp(p, "Multiplier") == 0) {
                 sscanf(strtok(NULL, "<>\n"), "0x%x", &multiplier);
                 if (multiplier == 0) multiplier = 1;
@@ -160,49 +148,44 @@ RAVEn_parseXML(char buffer[], raven_data_t *data_ptr)
     }
 }
 
-
-/**
- * RAVEn_getData - Read data from RAVEN port
- * @param rvn port to read
- * @param rvnData_ptr address to place data
- * @return 
- */
-int 
-RAVEn_getData(raven_t rvn, raven_data_t *rvnData_ptr) 
-{
+int
+ProcessRAVEnData(raven_t rvn, mqtt_data_t *message) {
     int retval;
     int rblen;
-    char readBuf[1024];
-    char xmlBuf[10*1024];
+    char readBuf[32];
+
     int xmlBufLen;
-    
+    raven_data_t rvnData;
+
     retval = RAVEN_FAIL;
-    WriteDBGLog("RAVEn: Starting to PROCESS input");
-    xmlBufLen=0;
+    xmlBufLen = 0;
     memset(readBuf, 0, sizeof ( readBuf));
-    while ((fgets(readBuf, sizeof ( readBuf), rvn.FH)) > 0) {
+    while (fgets(readBuf, sizeof (readBuf), rvn.FH) > 0) {
         rblen = strlen(readBuf);
         /* If Current buffer size + new Buffer being added is over the total buffer size BAD overflow */
-        if ((xmlBufLen + rblen) > 10*1024) {
+        if ((xmlBufLen + rblen) > 10 * 1024) {
             WriteDBGLog("RAVEn: Error BUFFER OVERFLOW");
             WriteDBGLog(xmlBuf);
-            WriteDBGLog(readBuf);
             break;
         } else {
-            strncat(xmlBuf, readBuf, sizeof(xmlBuf));
+            strncat(xmlBuf, readBuf, sizeof (xmlBuf));
             xmlBufLen += rblen;
             /* Check if this is the final XML tag Ending */
             /* Since I'm not really parsing XML, I am assuming the Rainforest dongle is spitting out its specific XML */
             /* They always add two space for XML inbetween the start and stop So the closing XML will always be </    */
             if (strncmp(readBuf, "</", 2) == 0) {
-                retval = RAVEn_parseXML(xmlBuf, rvnData_ptr);      
-                // Write to the LOG file if its turned on
+                WriteDBGLog("Starting to PROCESS RAVEn input");
                 WriteDBGLog(xmlBuf);
+                if (RAVEn_parseXML(xmlBuf, &rvnData) == RAVEN_PASS) {
+                    snprintf(message->payload, sizeof (message->payload), "{\"timestamp\":%u,\"value\":%.3f}", time(NULL), rvnData.demand);
+                    snprintf(message->topic, sizeof (message->topic), "home/%s/%s/%s", rvn.id, rvn.location, rvn.topic);
+                    retval = RAVEN_PASS;
+                    break;
+                }
                 memset(xmlBuf, 0, sizeof (xmlBuf));
-                break;
             }
         }
-        memset(readBuf, 0, sizeof ( readBuf));
     }
     return retval;
 }
+

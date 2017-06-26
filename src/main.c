@@ -22,9 +22,12 @@
  * THE SOFTWARE.
  */
 
-/*
+/**
  * File: main.c
- * Author: Nick Ong
+ * @author: Nick Ong
+ * @version 1.0
+ * @brief Read various sensor from a Raspberry Pi and publish to MQTT
+ * 
  */
 
 #include <stdio.h>
@@ -75,6 +78,11 @@ char gTempDevPath[256];
 char gCmdBuffer[1024 * 5];
 int gCmdBufferLen;
 
+/**
+ * 
+ * @param config_filename
+ * @return 
+ */
 static cfg_t *
 read_config(char config_filename[]) {
     cfg_t *cfg;
@@ -89,6 +97,7 @@ read_config(char config_filename[]) {
     static cfg_opt_t raven_opts[] = {
         CFG_STR("address", "/dev/ttyUSB0", CFGF_NONE),
         CFG_STR("mqttpubtopic", "home/device/demand", CFGF_NONE),
+        CFG_STR("location", "location", CFGF_NONE),
         CFG_END()
     };
     static cfg_opt_t dht22_opts[] = {
@@ -153,7 +162,7 @@ LoadINIParms(cfg_t **config, ds18b20pi_ports_t *sensors, raven_ports_t *raven, d
     for (i = 0; i < cfg_size(*config, "RAVEn"); i++) {
         if (i < MAXPORTS) {
             scfg = cfg_getnsec(*config, "RAVEn", i);
-            raven->ports[i] = RAVEn_create(cfg_getstr(scfg, "address"), cfg_title(scfg), cfg_getstr(scfg, "mqttpubtopic"));
+            raven->ports[i] = RAVEn_create(cfg_getstr(scfg, "address"), cfg_title(scfg), cfg_getstr(scfg, "mqttpubtopic"), cfg_getstr(scfg,"location"));
             raven->size++;
         }
     }
@@ -176,27 +185,6 @@ LoadINIParms(cfg_t **config, ds18b20pi_ports_t *sensors, raven_ports_t *raven, d
     client->mqttuid = cfg_getstr(*config, "mqttbrokeruid");
     client->mqttpasswd = cfg_getstr(*config, "mqttbrokerpwd");
 
-}
-
-
-static int
-ProcessRAVEnData(raven_t rvn, MQTTClient mqttClient) {
-    raven_data_t data;
-
-    char mqttPayload[1024];
-    char dbgBuf[1024];
-
-    WriteDBGLog("Starting to PROCESS RAVEn input");
-    if ((RAVEn_getData(rvn, &data)) == RAVEN_PASS) {
-        snprintf(mqttPayload, sizeof (mqttPayload), "{\"demand\":{\"timestamp\":%u,\"value\":%.3f}}", data.timestamp, data.demand);
-        snprintf(dbgBuf, sizeof (dbgBuf), "Sending payload %s", mqttPayload);
-        WriteDBGLog(dbgBuf);
-        mqttSendData(mqttClient, mqttPayload, rvn.topic);
-    } else {
-        WriteDBGLog("Failed to read RAVEn sensor");
-        return (RAVEN_FAIL);
-    }
-    return (RAVEN_PASS);
 }
 
 static int
@@ -341,7 +329,6 @@ main(int argc, char** argv) {
                     mqttSend_Data(mqttClient, &message);
                 } else {
                     WriteDBGLog("Failed to read temperature sensor");
-                    rc = 0;
                 }
             }
         }
@@ -357,8 +344,11 @@ main(int argc, char** argv) {
             }
             cntr = 0;
         }
+        
         for (i = 0; i < ravenPorts.size; i++) {
-            ProcessRAVEnData(ravenPorts.ports[i], mqttClient);
+            if (ProcessRAVEnData(ravenPorts.ports[i], &message) == RAVEN_PASS) {
+                mqttSend_Data(mqttClient, &message);
+            }
         }
         cntr++;
         nanosleep(&delay, NULL);

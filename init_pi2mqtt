@@ -72,9 +72,10 @@ EOF4
 
 # uncomment the next series if you have a RAVEn device attached to the rpi 
 # and want to monitor.  Ensure the serial USB is available
-#RAVEn raven {
+#RAVEn raven0 {
 # address = "/dev/ttyUSB0"
-# mqttpubtopic = "home/raven1/demand"
+# mqttpubtopic = "demand"
+# location = "location"
 #}
 
 EOF1

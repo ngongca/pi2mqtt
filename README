@@ -1,9 +1,7 @@
 pi2mqtt
 
-This tool monitors sensors connected to the Raspberry Pi. It then sends that
-data via mqtt to a broker indicated in the configuration file.  The current
-broker is hard coded with username piiot and password mqttpi.  The current
-sensors include:
+This tool monitors sensors connected to the Raspberry Pi.  The current sensors
+include:
 
 Temp -  DS18B20
 	You can connect multiple DS18B20 sensors to pin 4 of the rpi.  Be sure
@@ -26,24 +24,23 @@ Electric Demand - RAVEn
 
 To build the tools you will need to install the autotools suite.  For ubuntu:
 
-------------------------------------
-sudo apt-get update
-sudo apt-get install autotools-dev
-------------------------------------
+
+$ sudo apt-get update
+$ sudo apt-get install autotools-dev
+
 
 After the install follow these steps.
 
 Using GIT:
 
------------------------------------------------
-git clone https://github.com/ngongca/pi2mqtt.git
-cd pi2mqtt
-autoreconf -i
-./configure
-make
-sudo make install
-./init_pi2mqtt
-------------------------------------------------
+
+$ git clone https://github.com/ngongca/pi2mqtt.git
+$ autoreconf -i
+$ ./configure
+$ make
+$ sudo make install
+$ ./init_pi2mqtt
+
 
 You should then edit the template.conf file.
 

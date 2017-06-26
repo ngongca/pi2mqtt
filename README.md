@@ -24,23 +24,23 @@ Electric Demand - RAVEn
 
 To build the tools you will need to install the autotools suite.  For ubuntu:
 
-------------------------------------
-sudo apt-get update
-sudo apt-get install autotools-dev
-------------------------------------
+
+$ sudo apt-get update
+$ sudo apt-get install autotools-dev
+
 
 After the install follow these steps.
 
 Using GIT:
 
------------------------------------------------
-git clone https://github.com/ngongca/pi2mqtt.git
-autoreconf -i
-./configure
-make
-sudo make install
-./init_pi2mqtt
-------------------------------------------------
+
+$ git clone https://github.com/ngongca/pi2mqtt.git
+$ autoreconf -i
+$ ./configure
+$ make
+$ sudo make install
+$ ./init_pi2mqtt
+
 
 You should then edit the template.conf file.
 

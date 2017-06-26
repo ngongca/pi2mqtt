@@ -33,28 +33,28 @@ extern "C" {
 #endif
 
     typedef struct {
-        int killed; // flag to kill loop
+        int killed; ///< flag to kill loop
     } my_context_t;
 
     typedef struct {
-        char* mqttpasswd;
-        char* mqttuid;
-        char* mqtthostaddr;
-        char* mqttclientid;
+        char* mqttpasswd;  ///< Password for MQTT broker account
+        char* mqttuid;  ///< MQTT broker user id
+        char* mqtthostaddr; ///< MQTT broker host address
+        char* mqttclientid; ///< Unique client id to connect to broker.
     } mqtt_broker_t;
 
     typedef struct {
-        char payload[MQTT_MAXPAYLOAD];
-        char topic[MQTT_MAXTOPIC];
+        char payload[MQTT_MAXPAYLOAD];  ///< payload for publishing
+        char topic[MQTT_MAXTOPIC]; ///< mqtt publishing topic
     } mqtt_data_t;
 
-    extern void delivered(void *, MQTTClient_deliveryToken);
-    extern int msgarrvd(void *, char *, int, MQTTClient_message *);
-    extern void connlost(void *, char *);
-    extern void MQTT_sub(MQTTClient, char *);
-    extern int mqttSend_Data(MQTTClient, mqtt_data_t *);
+    extern void delivered(void* context, MQTTClient_deliveryToken token);
+    extern int msgarrvd(void* context, char* topicName, int topicLen, MQTTClient_message* message);
+    extern void connlost(void* context, char* cause);
+    extern void MQTT_sub(MQTTClient client, const char* topic);
+    extern int mqttSend_Data(MQTTClient client, mqtt_data_t* message);
     extern int mqttSendData(MQTTClient, char *, char *);
-    extern int MQTT_init(void *, MQTTClient *, mqtt_broker_t *);
+    extern int MQTT_init(void* context, MQTTClient* client, mqtt_broker_t* broker);
 
 #ifdef __cplusplus
 }
