@@ -48,7 +48,6 @@ RAVEn_sendCmd(raven_t rvn, char const *cmd) {
     if (strlen(cmd) > sizeof (cmdbuffer))
         return (RAVEN_FAIL);
     cmdlen = snprintf(cmdbuffer, sizeof (cmdbuffer), "<Command>\r\n  <Name>%s</Name>\r\n</Command>\r\n", cmd);
-    WriteDBGLog(cmdbuffer);
     len = write(rvn.FD, cmdbuffer, cmdlen);
     if (len != cmdlen) {
         snprintf(buf, sizeof (buf), "RAVEn: Error writing Command to RAVEn port, length %d != %d", len, cmdlen);
@@ -175,7 +174,7 @@ ProcessRAVEnData(raven_t rvn, mqtt_data_t *message) {
             /* They always add two space for XML inbetween the start and stop So the closing XML will always be </    */
             if (strncmp(readBuf, "</", 2) == 0) {
                 WriteDBGLog("Starting to PROCESS RAVEn input");
-                WriteDBGLog(xmlBuf);
+//                WriteDBGLog(xmlBuf);
                 if (RAVEn_parseXML(xmlBuf, &rvnData) == RAVEN_PASS) {
                     snprintf(message->payload, sizeof (message->payload), "{\"timestamp\":%u,\"value\":%.3f}", time(NULL), rvnData.demand);
                     snprintf(message->topic, sizeof (message->topic), "home/%s/%s/%s", rvn.id, rvn.location, rvn.topic);

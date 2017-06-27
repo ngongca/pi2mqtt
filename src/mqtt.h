@@ -31,11 +31,6 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-    typedef struct {
-        int killed; ///< flag to kill loop
-    } my_context_t;
-
     typedef struct {
         char* mqttpasswd;  ///< Password for MQTT broker account
         char* mqttuid;  ///< MQTT broker user id
@@ -43,6 +38,14 @@ extern "C" {
         char* mqttclientid; ///< Unique client id to connect to broker.
     } mqtt_broker_t;
 
+    typedef struct {
+        int killed; ///< flag to kill loop
+        int connected; ///< mqtt client is connected to broker.
+        MQTTClient* client; ///< the current client.
+        mqtt_broker_t* broker; ///< the current broker information.
+    } my_context_t;
+    
+    
     typedef struct {
         char payload[MQTT_MAXPAYLOAD];  ///< payload for publishing
         char topic[MQTT_MAXTOPIC]; ///< mqtt publishing topic

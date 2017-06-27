@@ -30,31 +30,59 @@
 #define QOS          1
 #define TIMEOUT      10000L
 
-int
-MQTT_init(void *context, MQTTClient *mqttClient, mqtt_broker_t *broker) {
-    char buf[512];
+void
+connectClient(MQTTClient* client, mqtt_broker_t* broker) {
+    char buf[128];
     MQTTClient_connectOptions conn_opts = MQTTClient_connectOptions_initializer;
+    conn_opts.keepAliveInterval = 20;
+    conn_opts.cleansession = 1;
+    conn_opts.password = broker->mqttpasswd;
+    conn_opts.username = broker->mqttuid;
+
+    WriteDBGLog("Attempting to connect");
+    while ((MQTTClient_connect(*client, &conn_opts)) != MQTTCLIENT_SUCCESS) {
+        snprintf(buf, sizeof (buf),
+                "Failed to connect user: %s, password: %s",
+                conn_opts.username, conn_opts.password);
+        WriteDBGLog(buf);
+        WriteDBGLog("Re-attempt in 10 seconds");
+        sleep(10);
+        WriteDBGLog("Attempting to connect");
+    }
+    WriteDBGLog("Connection to Broker Successful");
+}
+
+int
+MQTT_init(void* context, MQTTClient *mqttClient, mqtt_broker_t *broker) {
+    char buf[512];
     int rc;
 
     rc = MQTT_SUCCESS;
-    if (MQTTClient_create(mqttClient, broker->mqtthostaddr,
-            broker->mqttclientid, MQTTCLIENT_PERSISTENCE_NONE, NULL) != MQTTCLIENT_SUCCESS) {
+    ///@todo Implement Persistence 
+    if (MQTTClient_create(mqttClient, broker->mqtthostaddr, broker->mqttclientid,
+            MQTTCLIENT_PERSISTENCE_NONE, NULL) != MQTTCLIENT_SUCCESS) {
         snprintf(buf, sizeof (buf), "Could not create MQTT Client at %s uid %s password: %s", broker->mqtthostaddr, broker->mqttuid, broker->mqttpasswd);
         WriteDBGLog(buf);
         rc = MQTT_FAILURE;
     } else {
         MQTTClient_setCallbacks(*mqttClient, context, connlost, msgarrvd, delivered);
-        conn_opts.keepAliveInterval = 20;
-        conn_opts.cleansession = 1;
-        conn_opts.password = broker->mqttpasswd;
-        conn_opts.username = broker->mqttuid;
-        if ((rc = MQTTClient_connect(*mqttClient, &conn_opts)) != MQTTCLIENT_SUCCESS) {
-            snprintf(buf, sizeof (buf), "Failed to connect user: %s, password: %s, return code %d", conn_opts.username, conn_opts.password, rc);
-            WriteDBGLog(buf);
-            rc = MQTT_FAILURE;
-        }
+        connectClient(mqttClient, broker);
+        rc = MQTT_SUCCESS;
     }
     return rc;
+}
+
+void
+connlost(void *context, char *cause) {
+    my_context_t* c = (my_context_t *) context;
+
+    char buf[64];
+
+    snprintf(buf, 64, "Broker connection lost. Cause: %s\n", cause);
+    WriteDBGLog(buf);
+    c->connected = 0;
+    connectClient(c->client, c->broker);
+    c->connected = 1;
 }
 
 void
@@ -64,7 +92,6 @@ MQTT_sub(MQTTClient client, const char *topic) {
     WriteDBGLog(buf);
     MQTTClient_subscribe(client, topic, QOS);
 }
-
 
 void
 delivered(void *context, MQTTClient_deliveryToken token) {
@@ -97,12 +124,6 @@ msgarrvd(void *context, char* topicName, int topicLen, MQTTClient_message *messa
     MQTTClient_freeMessage(&message);
     MQTTClient_free(topicName);
     return 1;
-}
-
-void
-connlost(void *context, char *cause) {
-    printf("\nConnection lost\n");
-    printf("     cause: %s\n", cause);
 }
 
 /**
@@ -152,9 +173,9 @@ mqttSend_Data(MQTTClient client, mqtt_data_t *message) {
     pubmsg.retained = 0;
     snprintf(dbgBuf, sizeof (dbgBuf), "publishing - %s", message->payload);
     WriteDBGLog(dbgBuf);
-    MQTTClient_publishMessage(client, message->topic, &pubmsg, &token);
-    snprintf(dbgBuf, sizeof (dbgBuf), "Waiting for up to %d seconds for publication of %s on topic %s",
-            (int) (TIMEOUT / 1000), message->payload, message->topic);
+    int i = MQTTClient_publishMessage(client, message->topic, &pubmsg, &token);
+    snprintf(dbgBuf, sizeof (dbgBuf), "Waiting for up to %d seconds for publication of %s on topic %s with token %d %d",
+            (int) (TIMEOUT / 1000), message->payload, message->topic, token);
     WriteDBGLog(dbgBuf);
     rc = MQTTClient_waitForCompletion(client, token, TIMEOUT);
     snprintf(dbgBuf, sizeof (dbgBuf), "Message with delivery token %d delivered", token);

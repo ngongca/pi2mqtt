@@ -162,7 +162,7 @@ LoadINIParms(cfg_t **config, ds18b20pi_ports_t *sensors, raven_ports_t *raven, d
     for (i = 0; i < cfg_size(*config, "RAVEn"); i++) {
         if (i < MAXPORTS) {
             scfg = cfg_getnsec(*config, "RAVEn", i);
-            raven->ports[i] = RAVEn_create(cfg_getstr(scfg, "address"), cfg_title(scfg), cfg_getstr(scfg, "mqttpubtopic"), cfg_getstr(scfg,"location"));
+            raven->ports[i] = RAVEn_create(cfg_getstr(scfg, "address"), cfg_title(scfg), cfg_getstr(scfg, "mqttpubtopic"), cfg_getstr(scfg, "location"));
             raven->size++;
         }
     }
@@ -256,7 +256,7 @@ main(int argc, char** argv) {
     my_context_t my_context;
     mqtt_data_t message;
     struct timespec delay;
-    
+
     delay.tv_nsec = 1000000;
     delay.tv_sec = 0;
 
@@ -296,13 +296,16 @@ main(int argc, char** argv) {
     WriteDBGLog(STARTUP);
 
     my_context.killed = 0;
-
-    if (MQTT_init(&my_context, &mqttClient, &mclient)  == MQTT_FAILURE) {
+    my_context.connected = 0;
+    if (MQTT_init(&my_context, &mqttClient, &mclient) == MQTT_FAILURE) {
         exit(EXIT_FAILURE);
     }
-    
+    my_context.connected = 1;
+    my_context.broker = &mclient;
+    my_context.client = &mqttClient;
+
     MQTT_sub(mqttClient, cfg_getstr(cfg, "mqttsubtopic"));
-    
+
     cntr = 0;
 
     //init RAVEn
@@ -326,10 +329,15 @@ main(int argc, char** argv) {
             if (t - sensorPorts.lastsample[i] >= (long) sensorPorts.ports[i].sampletime) {
                 sensorPorts.lastsample[i] = t;
                 if (ProcessDS18B20PIData(sensorPorts.ports[i], &message) == DS18B20PI_SUCCESS) {
-                    mqttSend_Data(mqttClient, &message);
+                    if (my_context.connected) {
+                        mqttSend_Data(mqttClient, &message);
+                    } else {
+                        WriteDBGLog("Saving data here!!");
+                    }
                 } else {
                     WriteDBGLog("Failed to read temperature sensor");
                 }
+
             }
         }
         if (cfg_getint(cfg, "delay") <= cntr) {
@@ -344,18 +352,22 @@ main(int argc, char** argv) {
             }
             cntr = 0;
         }
-        
+
         for (i = 0; i < ravenPorts.size; i++) {
             if (ProcessRAVEnData(ravenPorts.ports[i], &message) == RAVEN_PASS) {
-                mqttSend_Data(mqttClient, &message);
+                if (my_context.connected) {
+                    mqttSend_Data(mqttClient, &message);
+                } else {
+                    WriteDBGLog("Saving RAVEN data");
+                }
             }
         }
         cntr++;
         nanosleep(&delay, NULL);
 
     }
-    
-    
+
+
     for (i = 0; i < ravenPorts.size; i++) {
         RAVEn_closePort(ravenPorts.ports[i]);
     }
