@@ -17,8 +17,8 @@
 #include <MQTTClient.h>
 
 #define MAXPORTS 32
-#define MQTT_MAXPAYLOAD 1024
-#define MQTT_MAXTOPIC 64
+#define MQTT_MAXPAYLOAD 512
+#define MQTT_MAXTOPIC 512
 
 #ifndef MQTT_SUCCESS
 #define MQTT_SUCCESS 0

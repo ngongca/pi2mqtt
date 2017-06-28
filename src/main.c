@@ -218,6 +218,22 @@ ProcessDHT22Data(dht22_port_t dht22, MQTTClient mqttClient) {
     return (DHT22_SUCCESS);
 }
 
+void
+mqttSave_data(const mqtt_data_t msg) {
+    FILE *fp;
+    char *filename = "./dump";
+    
+    if ((fp = fopen(filename, "a")) == NULL) {
+        WriteDBGLog("error opening persistence file");
+    }
+    
+    WriteDBGLog("Saving msg to file");
+    
+    fprintf(fp, "%s\n", msg.topic);
+    fprintf(fp, "%s\n", msg.payload);
+    
+    fclose(fp);
+}
 
 int
 main(int argc, char** argv) {
@@ -247,7 +263,8 @@ main(int argc, char** argv) {
     cfg_t *cfg = 0;
     int verbose = 0;
     char *configFile = "./ds18b20pi.config";
-
+    
+    
     while ((c = getopt(argc, argv, "v?hc:")) != -1) {
         switch (c) {
             case 'v':
@@ -317,6 +334,7 @@ main(int argc, char** argv) {
                         mqttSend_Data(mqttClient, &message);
                     } else {
                         WriteDBGLog("Saving data here!!");
+                        mqttSave_data(message);
                     }
                 } else {
                     WriteDBGLog("Failed to read temperature sensor");
@@ -337,6 +355,7 @@ main(int argc, char** argv) {
                         mqttSend_Data(mqttClient, &message);
                     } else {
                         WriteDBGLog("TODO Save Doorswitch state");
+                        mqttSave_data(message);
                     }
                 };
             }

@@ -75,13 +75,28 @@ MQTT_init(void* context, MQTTClient *mqttClient, mqtt_broker_t *broker) {
 void
 connlost(void *context, char *cause) {
     my_context_t* c = (my_context_t *) context;
-
-    char buf[64];
-
+    FILE *fp;
+    char buf[1024];
+    mqtt_data_t data;
+    char *filename = "./dump";
+    
     snprintf(buf, 64, "Broker connection lost. Cause: %s\n", cause);
     WriteDBGLog(buf);
+    fp = fopen(filename,"w"); 
+    fclose(fp);
     c->connected = 0;
     connectClient(c->client, c->broker);
+    if ((fp = fopen(filename,"r")) != NULL) {
+        while ( fgets(buf, sizeof(buf), fp) != NULL ) {
+            sscanf(buf, "%s\n", data.topic );
+            fgets(buf, sizeof(buf), fp);
+            sscanf(buf, "%s\n", data.payload);
+            sprintf(buf,"publishing stored data to %s", data.topic);
+            WriteDBGLog(buf);
+            mqttSend_Data(*c->client, &data);
+        }
+        fclose(fp);
+    }
     c->connected = 1;
 }
 
