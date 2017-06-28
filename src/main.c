@@ -109,6 +109,7 @@ read_config(char config_filename[]) {
     static cfg_opt_t doorswitch_opts[] = {
         CFG_INT("pin", 1, CFGF_NONE),
         CFG_STR("mqttpubtopic", "home/door", CFGF_NONE),
+        CFG_STR("location", "location", CFGF_NONE),
         CFG_END()
     };
     static cfg_opt_t opts[] = {
@@ -176,7 +177,8 @@ LoadINIParms(cfg_t **config, ds18b20pi_ports_t *sensors, raven_ports_t *raven, d
     for (i = 0; i < cfg_size(*config, "doorswitch"); i++) {
         if (i < MAXPORTS) {
             scfg = cfg_getnsec(*config, "doorswitch", i);
-            doorswitch->ports[i] = doorswitch_createPort(cfg_getint(scfg, "pin"), cfg_title(scfg), cfg_getstr(scfg, "mqttpubtopic"));
+            doorswitch->ports[i] = doorswitch_createPort(cfg_getint(scfg, "pin"), cfg_title(scfg), cfg_getstr(scfg, "mqttpubtopic"),
+                    cfg_getstr(scfg,"location"));
             doorswitch->size++;
         }
     }
@@ -216,29 +218,6 @@ ProcessDHT22Data(dht22_port_t dht22, MQTTClient mqttClient) {
     return (DHT22_SUCCESS);
 }
 
-static int
-ProcessDoorswitchData(doorswitch_port_t doorswitch, MQTTClient mqttClient) {
-    doorswitch_data_t data;
-
-    char mqttPayload[1024];
-    char dbgBuf[1024];
-    char topic[256];
-
-    WriteDBGLog("Starting to PROCESS door switch input");
-    if ((read_doorswitch_dat(doorswitch, &data)) == DOORSWITCH_SUCCESS) {
-        snprintf(mqttPayload, sizeof (mqttPayload), "{\"switchstate\":{\"timestamp\":%ld,\"value\":\"%s\"}}", data.timestamp, data.is_open == 1 ? "open" : "closed");
-        snprintf(topic, sizeof (topic), "%s", doorswitch.topic);
-        snprintf(dbgBuf, sizeof (dbgBuf), "Topic %s Payload %s", topic, mqttPayload);
-        WriteDBGLog(dbgBuf);
-
-        mqttSendData(mqttClient, mqttPayload, topic);
-
-    } else {
-        WriteDBGLog("Failed to read door switch");
-        return (DOORSWITCH_FAILURE);
-    }
-    return (DOORSWITCH_SUCCESS);
-}
 
 int
 main(int argc, char** argv) {
@@ -323,6 +302,11 @@ main(int argc, char** argv) {
         exit(EXIT_FAILURE);
     }
 
+    if (doorswitch_init() != DOORSWITCH_SUCCESS) {
+        WriteDBGLog("Error initializing Door Switches");
+        exit(EXIT_FAILURE);
+    }
+    
     while (!my_context.killed) {
         for (i = 0; i < sensorPorts.size; i++) {
             long t = time(NULL);
@@ -348,7 +332,13 @@ main(int argc, char** argv) {
 
             // process door switches
             for (i = 0; i < doorswitchPorts.size; i++) {
-                ProcessDoorswitchData(doorswitchPorts.ports[i], mqttClient);
+                if (ProcessDoorswitchData(&doorswitchPorts.ports[i], &message) == DOORSWITCH_SUCCESS) {
+                    if (my_context.connected) {
+                        mqttSend_Data(mqttClient, &message);
+                    } else {
+                        WriteDBGLog("TODO Save Doorswitch state");
+                    }
+                };
             }
             cntr = 0;
         }

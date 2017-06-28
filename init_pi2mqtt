@@ -54,7 +54,7 @@ EOF4
       then
         echo "ds18b20 sensor$y {" >> template.conf
         echo " address = \"$x\"" >> template.conf
-        echo " location = \"location\"" >> template.conf
+        echo " location = \"<location>\"" >> template.conf
         echo " mqttpubtopic = \"temp\"" >> template.conf
         echo " sampletime = 1" >> template.conf
         echo " isfahrenheit = 1" >> template.conf
@@ -97,8 +97,9 @@ EOF1
 # multiple switches, just provide different names and topics.  You must also
 # provide the wiringPi pin number.
 #doorswitch door1 {
-# pin = ?
-# mqttpubtopic = "home/door1"
+# pin = <pin number>
+# location = "<location>"
+# mqttpubtopic = "switchstate"
 #}
 
 # the log file name that will be created if -v or debug mode is set

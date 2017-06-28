@@ -33,36 +33,40 @@
 #define DOORSWITCH_H
 
 #ifndef DOORSWITCH_SUCCESS
-#define DOORSWITCH_SUCCESS 0
+#define DOORSWITCH_SUCCESS 0  ///< success indicator
 #endif
 
 #ifndef DOORSWITCH_FAILURE
-#define DOORSWITCH_FAILURE -1
+#define DOORSWITCH_FAILURE -1  ///< failure indicator
 #endif
+
+
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-  typedef struct {
-        int pin; //file handle for port
-        char id[64]; // id of device
-        char topic[128]; // topic used for publishing
-    } doorswitch_port_t;
+#include "mqtt.h"
 
     typedef struct {
-        int is_open; // 1 indicated door open, 0 otherwise
-        time_t timestamp; // timestamp of data
-    } doorswitch_data_t;
+        int pin; ///< id of Wiring PI digital pin this port is attached
+        char id[64]; ///< id of device
+        char location[64]; ///< location of this doorswitch
+        int state; ///< state of the doorswitch
+        char topic[64]; ///< topic suffix used for publishing
+    } doorswitch_port_t;
+
 
     /**
-     * Return a new port
+     * \brief Create a new door switch port
      * @param pin - pin number
      * @param id - unique string identifier
-     * @param topic - topic which this port will publish to mqtt
+     * @param topic - suffix topic which this port will publish to mqtt
+     * @param location - location for this port
      * @return a configured port
      */
-    extern doorswitch_port_t doorswitch_createPort(int, const char *, const char *);
+    extern doorswitch_port_t doorswitch_createPort(int pin, const char* id,
+            const char* topic, const char* location);
 
     /**
      * Initialize the doorswitch - In this case, just set up the wiringPi.
@@ -71,12 +75,17 @@ extern "C" {
     extern int doorswitch_init();
 
     /**
-     * Read the door switch port and return the data
-     * @param port
-     * @param data
-     * @return DOORSWITCH_SUCCESS if read was successful.
+     * \brief Process door switch port data.
+     * 
+     * Read state of the door switch.  If it changed, notify calling function and
+     * place data into the message.  This will also change the state of the port
+     * to the current state.
+     * 
+     * @param port door switch to read
+     * @param message MQTT formated topic and data
+     * @return DOORSWITCH_SUCCESS if the state changed and the swtichy
      */
-    extern int read_doorswitch_dat(doorswitch_port_t, doorswitch_data_t *);
+    extern int ProcessDoorswitchData(doorswitch_port_t* port, mqtt_data_t* message);
 
 #ifdef __cplusplus
 }

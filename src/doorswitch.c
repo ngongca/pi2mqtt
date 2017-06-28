@@ -33,6 +33,7 @@
 
 #include "debug.h"
 #include "doorswitch.h"
+#include "mqtt.h"
 
 /**
  * Return a new port
@@ -42,22 +43,24 @@
  * @return a configured port
  */
 doorswitch_port_t
-doorswitch_createPort(int pin, const char *id, const char *topic) {
+doorswitch_createPort(int pin, const char *id, const char *topic, const char* location) {
+    char dbgBuf[256];
     doorswitch_port_t port;
+    snprintf(dbgBuf, sizeof (dbgBuf), "Creating door switch %s pin %d at %s", id, pin, location);
+    WriteDBGLog(dbgBuf);    
     port.pin = pin;
+    port.state = -1;
     strncpy(port.id, id, sizeof (port.id));
     strncpy(port.topic, topic, sizeof (port.topic));
+    strncpy(port.location, location, sizeof (port.location));
     return (port);
 }
 
-/**
- * Initialize the door switch - In this case, just set up the wiringPi.
- * @return DOORSWITCH_SUCCESS if initialization is good.
- */
 int
 doorswitch_init() {
     int iErr = 0;
     int rc = DOORSWITCH_SUCCESS;
+    WriteDBGLog("initializing Door Switches");
     iErr = wiringPiSetup();
     if (iErr == -1) {
         WriteDBGLog("doorswitch : Error Failed to init WiringPi");
@@ -70,22 +73,24 @@ doorswitch_init() {
     return (rc);
 }
 
-/**
- * Read the doorswitch port and return the data
- * @param port
- * @param data
- * @return DOORSWITCH_SUCCESS if read was successful.
- */
 int
-read_doorswitch_dat(doorswitch_port_t port, doorswitch_data_t *data) {
-
-    data->timestamp = time(NULL);
-    pinMode(port.pin, INPUT);
-    if (digitalRead(port.pin) == 1) {
-        data->is_open = 1;
-    } else {
-        data->is_open = 0;
-    }
-    return DOORSWITCH_SUCCESS;
+ProcessDoorswitchData(doorswitch_port_t* port, mqtt_data_t* message) {
+    char dbgBuf[256];
+    
+    int rc = DOORSWITCH_FAILURE;
+    pinMode(port->pin, INPUT);
+    int data = digitalRead(port->pin);
+    if (data != port->state) {
+        snprintf(dbgBuf, sizeof (dbgBuf), "Door %s changed to state %d", port->id, data);
+        WriteDBGLog(dbgBuf);
+        port->state = data;
+        snprintf(message->payload, sizeof (message->payload), 
+                "{\"timestamp\":%ld,\"state\":\"%s\"}",
+                time(NULL), data == 1 ? "opened" : "closed");
+        snprintf(message->topic, sizeof (message->topic), "home/%s/%s/%s",
+                port->id, port->location, port->topic);
+        rc = DOORSWITCH_SUCCESS;
+    } 
+    return rc;
 }
 
