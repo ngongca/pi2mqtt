@@ -40,7 +40,6 @@ extern "C" {
 
     typedef struct {
         int killed; ///< flag to kill loop
-        int connected; ///< mqtt client is connected to broker.
         MQTTClient* client; ///< the current client.
         mqtt_broker_t* broker; ///< the current broker information.
     } my_context_t;
@@ -51,12 +50,8 @@ extern "C" {
         char topic[MQTT_MAXTOPIC]; ///< mqtt publishing topic
     } mqtt_data_t;
 
-    extern void delivered(void* context, MQTTClient_deliveryToken token);
-    extern int msgarrvd(void* context, char* topicName, int topicLen, MQTTClient_message* message);
-    extern void connlost(void* context, char* cause);
     extern void MQTT_sub(MQTTClient client, const char* topic);
-    extern int mqttSend_Data(MQTTClient client, mqtt_data_t* message);
-    extern int mqttSendData(MQTTClient, char *, char *);
+    extern int MQTT_send(MQTTClient client, mqtt_data_t* message);
     extern int MQTT_init(void* context, MQTTClient* client, mqtt_broker_t* broker);
 
 #ifdef __cplusplus
