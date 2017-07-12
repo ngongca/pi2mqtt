@@ -170,7 +170,7 @@ LoadINIParms(cfg_t **config, ds18b20pi_ports_t *sensors, raven_ports_t *raven, d
     for (i = 0; i < cfg_size(*config, "dht22"); i++) {
         if (i < MAXPORTS) {
             scfg = cfg_getnsec(*config, "dht22", i);
-            dht22p->ports[i] = dht22_createPort(cfg_getint(scfg, "pin"), cfg_title(scfg), cfg_getstr(scfg, "mqttpubtopic"), cfg_getint(scfg, "isfahrenheit"));
+            dht22p->ports[i] = DHT22_create(cfg_getint(scfg, "pin"), cfg_title(scfg), cfg_getstr(scfg, "mqttpubtopic"), cfg_getint(scfg, "isfahrenheit"));
             dht22p->size++;
         }
     }
@@ -187,33 +187,6 @@ LoadINIParms(cfg_t **config, ds18b20pi_ports_t *sensors, raven_ports_t *raven, d
     client->mqttuid = cfg_getstr(*config, "mqttbrokeruid");
     client->mqttpasswd = cfg_getstr(*config, "mqttbrokerpwd");
 
-}
-
-static int
-ProcessDHT22Data(dht22_port_t dht22, MQTTClient mqttClient) {
-    dht22_data_t data;
-    mqtt_data_t mdata;
-    char dbgBuf[512];
-
-    WriteDBGLog("Starting to PROCESS dht22 input");
-    if ((read_dht22_dat(dht22, &data)) == DHT22_SUCCESS) {
-        snprintf(mdata.payload, sizeof (mdata.payload), "{\"temperature\":{\"timestamp\":%ld,\"value\":%.3f}}", data.timestamp, data.temperature);
-        snprintf(mdata.topic, sizeof (mdata.topic), "%s/temperature", dht22.topic);
-        snprintf(dbgBuf, sizeof (dbgBuf), "Topic %s Payload %s", mdata.topic, mdata.payload);
-        WriteDBGLog(dbgBuf);
-
-        MQTT_send(mqttClient, &mdata);
-
-        snprintf(mdata.payload, sizeof (mdata.payload), "{\"humidity\":{\"timestamp\":%ld,\"value\":%.3f}}", data.timestamp, data.humidity);
-        snprintf(mdata.topic, sizeof (mdata.topic), "%s/humidity", dht22.topic);
-        snprintf(dbgBuf, sizeof (dbgBuf), "Topic %s Payload %s", mdata.topic, mdata.payload);
-        WriteDBGLog(dbgBuf);
-        MQTT_send(mqttClient, &mdata);
-    } else {
-        WriteDBGLog("Failed to read dht22 sensor");
-        return (DHT22_FAILURE);
-    }
-    return (DHT22_SUCCESS);
 }
 
 int
@@ -290,12 +263,13 @@ main(int argc, char** argv) {
         RAVEn_sendCmd(raven_ports.ports[i], "initialize");
     }
 
-    //init DHT22
-    if (dht22_init() != DHT22_SUCCESS) {
-        WriteDBGLog("Error opening DHT22 sensor");
-        exit(EXIT_FAILURE);
+    for (i = 0; i < dht22_ports.size; i++) {
+        if (DHT22_init(&dht22_ports.ports[i]) != DHT22_SUCCESS) {
+            WriteDBGLog("Error opening DHT22 sensor");
+            exit(EXIT_FAILURE);
+        }
     }
-    
+
     if (DS18B20PI_init() != DS18B20PI_SUCCESS) {
         WriteDBGLog("Error initializing DS18B20");
         exit(EXIT_FAILURE);
@@ -322,7 +296,9 @@ main(int argc, char** argv) {
         if (cfg_getint(cfg, "delay") <= cntr) {
             // process dht22
             for (i = 0; i < dht22_ports.size; i++) {
-                ProcessDHT22Data(dht22_ports.ports[i], mqtt_client);
+                if (DHT22_process_temperature(dht22_ports.ports[i], &message) == DHT22_SUCCESS) {
+                    MQTT_send(mqtt_client, &message);
+                };
             }
 
             // process door switches

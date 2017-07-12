@@ -38,6 +38,7 @@
 #include <unistd.h>
 
 #include "debug.h"
+#include "mqtt.h"
 #include "dht22.h"
 
 #define MAXTIMINGS 85
@@ -53,7 +54,7 @@ static int portpin;
  * @return a configured port
  */
 dht22_port_t
-dht22_createPort(int pin, const char *id, const char *topic, int isFahrenheit) {
+DHT22_create(int pin, const char *id, const char *topic, int isFahrenheit) {
     dht22_port_t port;
     port.pin = pin;
     strncpy(port.id, id, sizeof (port.id));
@@ -80,7 +81,7 @@ sizecvt(const int read) {
  * @param data
  * @return DHT22_SUCCESS if read was successful.
  */
-int
+static int
 read_dht22_dat(dht22_port_t port, dht22_data_t *data) {
     uint8_t laststate = HIGH;
     uint8_t counter = 0;
@@ -151,12 +152,8 @@ read_dht22_dat(dht22_port_t port, dht22_data_t *data) {
     }
 }
 
-/**
- * Initialize the DHT22 - In this case, just set up the wiringPi.
- * @return DHT22_SUCCESS if initialization is good.
- */
 int
-dht22_init() {
+DHT22_init(void* port) {
     int iErr = 0;
     int rc = DHT22_SUCCESS;
     iErr = wiringPiSetup();
@@ -171,4 +168,41 @@ dht22_init() {
     return (rc);
 }
 
+int
+DHT22_process_temperature(dht22_port_t dht22, mqtt_data_t* mdata) {
+    dht22_data_t data;
+
+    char dbgBuf[512];
+
+    WriteDBGLog("Starting to PROCESS dht22 input");
+    if ((read_dht22_dat(dht22, &data)) == DHT22_SUCCESS) {
+        snprintf(mdata->payload, sizeof (mdata->payload), "{\"temperature\":{\"timestamp\":%ld,\"value\":%.3f}}", data.timestamp, data.temperature);
+        snprintf(mdata->topic, sizeof (mdata->topic), "%s/temperature", dht22.topic);
+        snprintf(dbgBuf, sizeof (dbgBuf), "Topic %s Payload %s", mdata->topic, mdata->payload);
+        WriteDBGLog(dbgBuf);
+    } else {
+        WriteDBGLog("Failed to read dht22 sensor");
+        return (DHT22_FAILURE);
+    }
+    return (DHT22_SUCCESS);
+}
+
+int
+DHT22_process_humidity(dht22_port_t dht22, mqtt_data_t* mdata) {
+    dht22_data_t data;
+
+    char dbgBuf[512];
+
+    WriteDBGLog("Starting to PROCESS dht22 input");
+    if ((read_dht22_dat(dht22, &data)) == DHT22_SUCCESS) {
+        snprintf(mdata->payload, sizeof (mdata->payload), "{\"humidity\":{\"timestamp\":%ld,\"value\":%.3f}}", data.timestamp, data.humidity);
+        snprintf(mdata->topic, sizeof (mdata->topic), "%s/humidity", dht22.topic);
+        snprintf(dbgBuf, sizeof (dbgBuf), "Topic %s Payload %s", mdata->topic, mdata->payload);
+        WriteDBGLog(dbgBuf);
+    } else {
+        WriteDBGLog("Failed to read dht22 sensor");
+        return (DHT22_FAILURE);
+    }
+    return (DHT22_SUCCESS);
+}
 
