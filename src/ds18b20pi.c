@@ -38,16 +38,11 @@
 #include "debug.h"
 #include "mqtt.h"
 
-/**
- * Create a new port
- * @param path - direct path to device including device number
- * @param id - id used to uniquely identify sensor
- * @param topic - final topic to post.  Typically "temp"
- * @param sampletime - in milliseconds
- * @param location - used for topic
- * @param isFahrenheit - determines scale of data
- * @return 
- */
+int
+DS18B20PI_init() {
+    return DS18B20PI_SUCCESS;
+}
+
 DS18B20PI_port_t
 DS18B20PI_createPort(const char *path, const char *id, const char *topic, const int sampletime, const char *location, const int isFahrenheit) {
     DS18B20PI_port_t port;
@@ -60,68 +55,32 @@ DS18B20PI_createPort(const char *path, const char *id, const char *topic, const 
     return (port);
 }
 
-/**
- * Open the port for the location and store in the port variable
- * @param port - DS18B20PI_port that will be initialized and opened
- * @param location - device directory where the sensor file will be found, ex. /sys/bus/w1/devices
- * @return DS18B20PI_SUCCESS or _FAILURE
- */
 int
-DS18B20PI_openPort(DS18B20PI_port_t *port) {
-    char dbgBuf[512];
-    char fullPath[512];
-    int rc;
-
-    rc = DS18B20PI_FAILURE;
-
-    snprintf(fullPath, sizeof (fullPath), "%s/w1_slave", port->path);
-    snprintf(dbgBuf, sizeof (dbgBuf), "Opening port [%s]", fullPath);
-    WriteDBGLog(dbgBuf);
-    port->FH = fopen(fullPath, "r");
-    if (port->FH == NULL) {
-        snprintf(dbgBuf, sizeof (dbgBuf), "open_port: Unable to open %s. 0x%0x - %s\n", port->path, errno, strerror(errno));
-        WriteDBGLog(dbgBuf);
-        perror(dbgBuf);
-    } else {
-        WriteDBGLog("ds18b20 Port is open");
-        rc = DS18B20PI_SUCCESS;
-    }
-    return (rc);
-} //OpenPort
-
-/**
- * 
- * @param port
- */
-void
-DS18B20PI_closePort(DS18B20PI_port_t port) {
-    WriteDBGLog("Closing DS18B20 Port");
-    fclose(port.FH);
-} // ClosePort()
-
-/**
- * Process data from this ds18b20 sensor and return the data
- * @param sensorPort to process
- * @param message will contain the topic and payload for this sensor read
- * @return DS18B20PI_SUCCESS if successful, DS18B20PI_FAILURE otherwise
- */
-int
-ProcessDS18B20PIData(DS18B20PI_port_t port, mqtt_data_t *message) {
+DS18B20PI_process_data(DS18B20PI_port_t port, mqtt_data_t *message) {
     int rc;
     char *value;
     char dbgBuf[1024];
     char readBuf[512];
+    char fullPath[512];
     float temp;
     int i;
-
+    FILE* fh;
+    
     rc = DS18B20PI_FAILURE;
-    if (DS18B20PI_openPort(&port) != DS18B20PI_SUCCESS) {
-        WriteDBGLog("Error opening DS18B20 port");
+    snprintf(fullPath, sizeof (fullPath), "%s/w1_slave", port.path);
+    snprintf(dbgBuf, sizeof (dbgBuf), "Opening port [%s]", fullPath);
+    WriteDBGLog(dbgBuf);
+    // to read the ds18b20, you need to re-open the file
+    fh = fopen(fullPath, "r");
+    if (fh == NULL) {
+        snprintf(dbgBuf, sizeof (dbgBuf), "open_port: Unable to open %s. 0x%0x - %s\n", fullPath, errno, strerror(errno));
+        WriteDBGLog(dbgBuf);
+        perror(dbgBuf);
     } else {
         memset(readBuf, 0, sizeof ( readBuf));
-        if (fgets(readBuf, sizeof (readBuf), port.FH) > 0) {
+        if (fgets(readBuf, sizeof (readBuf), fh) > 0) {
             if (strstr(readBuf, "YES") != NULL) {
-                if (fgets(readBuf, sizeof (readBuf), port.FH) > 0) {
+                if (fgets(readBuf, sizeof (readBuf), fh) > 0) {
                     //Extract temp data an if Fahrenheit, convert
                     if (strtok(readBuf, "\nt=") != NULL) {
                         value = strtok(NULL, "\nt=");
@@ -150,7 +109,8 @@ ProcessDS18B20PIData(DS18B20PI_port_t port, mqtt_data_t *message) {
         } else {
             WriteDBGLog("No data Read");
         }
-        DS18B20PI_closePort(port);
+        WriteDBGLog("Closing DS18B20 Port");
+        fclose(fh);
         return (rc);
     }
 }

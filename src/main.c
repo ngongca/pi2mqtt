@@ -295,6 +295,11 @@ main(int argc, char** argv) {
         WriteDBGLog("Error opening DHT22 sensor");
         exit(EXIT_FAILURE);
     }
+    
+    if (DS18B20PI_init() != DS18B20PI_SUCCESS) {
+        WriteDBGLog("Error initializing DS18B20");
+        exit(EXIT_FAILURE);
+    }
 
     if (doorswitch_init() != DOORSWITCH_SUCCESS) {
         WriteDBGLog("Error initializing Door Switches");
@@ -306,7 +311,7 @@ main(int argc, char** argv) {
             long t = time(NULL);
             if (t - ds18b20_ports.lastsample[i] >= (long) ds18b20_ports.ports[i].sampletime) {
                 ds18b20_ports.lastsample[i] = t;
-                if (ProcessDS18B20PIData(ds18b20_ports.ports[i], &message) == DS18B20PI_SUCCESS) {
+                if (DS18B20PI_process_data(ds18b20_ports.ports[i], &message) == DS18B20PI_SUCCESS) {
                     MQTT_send(mqtt_client, &message);
                 } else {
                     WriteDBGLog("Failed to read temperature sensor");
