@@ -1,9 +1,9 @@
-#pi2mqtt
+# pi2mqtt
 
 This tool monitors sensors connected to the Raspberry Pi and sends the data to a
 broker via mqtt protocol.  The current sensors include:
 
-##Temp -  DS18B20
+## Temp -  DS18B20
 You can connect multiple DS18B20 sensors to pin 4 of the rpi.  Be sure to include 
 a 4.7Kohm pull up.  The tools will scan for devices in the `/sys/bus/w1/devices` directory.  DS18B20 devices will have the prefix of _28-\*_.
 	
@@ -13,14 +13,14 @@ For the sensor kernel module to be enabled, include the following line in the `/
 ```
 Edit the file and include the above line, then reboot, and the device should be visible
 
-##Electric Demand - RAVEn
+## Electric Demand - RAVEn
 The **Rainforest RAVEn** device connect to the USB port on the rpi and can be used 
 to read a smart electric meter in the home.  Currently, this works with San Diego Gas and Electric Meters to the best of the authors knowledge.
 
-##Basic Switch
+## Basic Switch
 This can be any digital signal on a pin that is either high or low.  The tool reads the digital pin using the **wiringPi** package numbering scheme.  You will need to add the pin number to your configuration file.
 
-##Installation
+## Installation
 To build and install the tools you will need to install the autotools suite.  For ubuntu:
 ```
     $ sudo apt-get update
@@ -43,7 +43,7 @@ Using GIT:
     $ sudo make install
     $ ./init_pi2mqtt
 ```
-##Configuration
+## Configuration
 `./init_pi2mqtt` generates a template configuration file, ___template.conf___ , that will need to be edited for your configuration.  It uses the **confuse** libary syntax. Below is the syntax for the various types of sensors.
 ### Manditory fields
 client ID for the mqtt sensor controller (usually the microcontroller id such as the PI  THIS MUST BE A UNIQUE identifier)
