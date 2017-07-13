@@ -8,9 +8,6 @@ else
 # template.conf - configuration file to provide to the pi2mqtt tool.  
 # This file sets devices up so that pi2mqtt will monitor.
 
-# interval in seconds to sample temperature
-delay = 5
-
 # client ID for the mqtt sensor controller (usually the microcontroller id 
 # such as the PI  THIS MUST BE A UNIQUE identifier)
 clientid = client$RANDOM
@@ -100,6 +97,7 @@ EOF1
 # pin = <pin number>
 # location = "<location>"
 # mqttpubtopic = "switchstate"
+# sampletime = "1"
 #}
 
 # the log file name that will be created if -v or debug mode is set

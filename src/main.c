@@ -68,6 +68,7 @@ typedef struct {
 typedef struct {
     int size;
     doorswitch_port_t ports[MAXPORTS];
+    long lastsample[MAXPORTS];
 } doorswitch_ports_t;
 
 char *gApp = "pi2mqtt";
@@ -110,10 +111,10 @@ read_config(char config_filename[]) {
         CFG_INT("pin", 1, CFGF_NONE),
         CFG_STR("mqttpubtopic", "home/door", CFGF_NONE),
         CFG_STR("location", "location", CFGF_NONE),
+        CFG_INT("sampletime", 5, CFGF_NONE),
         CFG_END()
     };
     static cfg_opt_t opts[] = {
-        CFG_INT("delay", 1000, CFGF_NONE),
         CFG_STR("mqttbrokeraddress", "localhost", CFGF_NONE),
         CFG_STR("mqttbrokeruid", "mqttpi", CFGF_NONE),
         CFG_STR("mqttbrokerpwd", "piiot", CFGF_NONE),
@@ -170,16 +171,19 @@ LoadINIParms(cfg_t **config, ds18b20pi_ports_t *sensors, raven_ports_t *raven, d
     for (i = 0; i < cfg_size(*config, "dht22"); i++) {
         if (i < MAXPORTS) {
             scfg = cfg_getnsec(*config, "dht22", i);
-            dht22p->ports[i] = DHT22_create(cfg_getint(scfg, "pin"), cfg_title(scfg), cfg_getstr(scfg, "mqttpubtopic"), cfg_getint(scfg, "isfahrenheit"));
+            dht22p->ports[i] = DHT22_create(cfg_getint(scfg, "pin"), cfg_title(scfg),
+                    cfg_getstr(scfg, "mqttpubtopic"), cfg_getint(scfg, "isfahrenheit"));
             dht22p->size++;
         }
     }
     for (i = 0; i < cfg_size(*config, "doorswitch"); i++) {
         if (i < MAXPORTS) {
             scfg = cfg_getnsec(*config, "doorswitch", i);
-            doorswitch->ports[i] = doorswitch_createPort(cfg_getint(scfg, "pin"), cfg_title(scfg), cfg_getstr(scfg, "mqttpubtopic"),
-                    cfg_getstr(scfg, "location"));
+            doorswitch->ports[i] = doorswitch_createPort(cfg_getint(scfg, "pin"),
+                    cfg_title(scfg), cfg_getstr(scfg, "mqttpubtopic"),
+                    cfg_getstr(scfg, "location"), cfg_getint(scfg, "sampletime"));
             doorswitch->size++;
+            doorswitch->lastsample[i] = 0;
         }
     }
     client->mqtthostaddr = cfg_getstr(*config, "mqttbrokeraddress");
@@ -293,17 +297,20 @@ main(int argc, char** argv) {
 
             }
         }
-        if (cfg_getint(cfg, "delay") <= cntr) {
-            // process dht22
-            for (i = 0; i < dht22_ports.size; i++) {
-                if (DHT22_process_temperature(dht22_ports.ports[i], &message) == DHT22_SUCCESS) {
+        // process door switches
+        for (i = 0; i < doorswitch_ports.size; i++) {
+            long t = time(NULL);
+            if (t - doorswitch_ports.lastsample[i] >= (long) doorswitch_ports.ports[i].sampletime) {
+                doorswitch_ports.lastsample[i] = t;
+                if (ProcessDoorswitchData(&doorswitch_ports.ports[i], &message) == DOORSWITCH_SUCCESS) {
                     MQTT_send(mqtt_client, &message);
                 };
             }
-
-            // process door switches
-            for (i = 0; i < doorswitch_ports.size; i++) {
-                if (ProcessDoorswitchData(&doorswitch_ports.ports[i], &message) == DOORSWITCH_SUCCESS) {
+        }
+        if (5 <= cntr) {
+            // process dht22
+            for (i = 0; i < dht22_ports.size; i++) {
+                if (DHT22_process_temperature(dht22_ports.ports[i], &message) == DHT22_SUCCESS) {
                     MQTT_send(mqtt_client, &message);
                 };
             }

@@ -20,6 +20,13 @@ to read a smart electric meter in the home.  Currently, this works with San Dieg
 ## Basic Switch
 This can be any digital signal on a pin that is either high or low.  The tool reads the digital pin using the **wiringPi** package numbering scheme.  You will need to add the pin number to your configuration file.
 
+## Usage
+```
+    $ pi2mqtt [-v] [-c FILE]
+    -v - verbose mode.
+    -c - configuration file
+```
+
 ## Installation
 To build and install the tools you will need to install the autotools suite.  For ubuntu:
 ```

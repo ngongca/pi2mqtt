@@ -43,13 +43,15 @@
  * @return a configured port
  */
 doorswitch_port_t
-doorswitch_createPort(int pin, const char *id, const char *topic, const char* location) {
+doorswitch_createPort(int pin, const char *id, const char *topic, 
+        const char* location, int sampletime) {
     char dbgBuf[256];
     doorswitch_port_t port;
     snprintf(dbgBuf, sizeof (dbgBuf), "Creating door switch %s pin %d at %s", id, pin, location);
     WriteDBGLog(dbgBuf);    
     port.pin = pin;
     port.state = -1;
+    port.sampletime = sampletime;
     strncpy(port.id, id, sizeof (port.id));
     strncpy(port.topic, topic, sizeof (port.topic));
     strncpy(port.location, location, sizeof (port.location));
