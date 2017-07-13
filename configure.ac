@@ -11,9 +11,15 @@ AC_CONFIG_HEADERS([config.h])
 AC_PROG_CC
 
 # Checks for libraries.
-AC_SEARCH_LIBS([MQTTClient_subscribe], [paho-mqtt3c])
-AC_SEARCH_LIBS([cfg_parse], [confuse])
-AC_SEARCH_LIBS([wiringPiSetup], [wiringPi])
+AC_SEARCH_LIBS([MQTTClient_subscribe], [paho-mqtt3c], [], [
+    AC_MSG_WARN([unable to find the paho-mqtt3c library])
+])
+AC_SEARCH_LIBS([cfg_parse], [confuse], [], [
+    AC_MSG_WARN([unable to find the confuse library])
+])
+AC_SEARCH_LIBS([wiringPiSetup], [wiringPi], [], [
+    AC_MSG_WARN([unable to find the wiringPi library])
+])
 
 # Checks for header files.
 AC_CHECK_HEADERS([fcntl.h])
