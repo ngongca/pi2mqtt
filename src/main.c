@@ -218,7 +218,7 @@ main(int argc, char** argv) {
 
     cfg_t *cfg = 0;
     int verbose = 0;
-    char *configFile = "./ds18b20pi.config";
+    char *configFile = "./template.conf";
 
 
     while ((c = getopt(argc, argv, "v?hc:")) != -1) {
@@ -230,7 +230,7 @@ main(int argc, char** argv) {
             case 'h':
                 printf(STARTUP);
                 printf("\r\n-v - VERBOSE print everything that would go to DEBUG LOG if debug was turned on\r\n");
-                printf("\r\n-c <filename> - Configuration file\r\n");
+                printf("\r\n-c <filename> - Configuration file. Default is template.conf\r\n");
                 exit(EXIT_SUCCESS);
                 break;
             case 'c':

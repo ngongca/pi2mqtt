@@ -17,14 +17,14 @@ Edit the file and include the above line, then reboot, and the device should be 
 The **Rainforest RAVEn** device connect to the USB port on the rpi and can be used 
 to read a smart electric meter in the home.  Currently, this works with San Diego Gas and Electric Meters to the best of the authors knowledge.
 
-## Basic Switch
-This can be any digital signal on a pin that is either high or low.  The tool reads the digital pin using the **wiringPi** package numbering scheme.  You will need to add the pin number to your configuration file.
+## Door Switch
+This can be any digital signal on a pin that is either high or low.  Currently used for a magnetic Reed switch on a door.  The tool reads the digital pin using the **wiringPi** package numbering scheme.  You will need to add the pin number to your configuration file.
 
 ## Usage
 ```
     $ pi2mqtt [-v] [-c FILE]
     -v - verbose mode.
-    -c - configuration file
+    -c - configuration file (default is template.conf)
 ```
 
 ## Installation
