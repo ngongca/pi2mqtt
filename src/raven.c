@@ -37,7 +37,6 @@
 
 static char xmlBuf[10 * 1024];
 
-
 int
 RAVEn_sendCmd(raven_t rvn, char const *cmd) {
     int len;
@@ -57,7 +56,6 @@ RAVEn_sendCmd(raven_t rvn, char const *cmd) {
     return ( RAVEN_PASS);
 }
 
-
 raven_t
 RAVEn_create(const char *path, const char *id, const char *topic, const char *location) {
     raven_t raven;
@@ -67,7 +65,6 @@ RAVEn_create(const char *path, const char *id, const char *topic, const char *lo
     strncpy(raven.location, location, sizeof (raven.location));
     return raven;
 }
-
 
 int
 RAVEn_openPort(raven_t *rvn) {
@@ -117,6 +114,7 @@ RAVEn_parseXML(char buffer[], raven_data_t *data_ptr) {
     uint multiplier;
     uint divisor;
     uint timestamp;
+    char buf[128];
 
     p = strtok(buffer, "<>\n");
     if (strcmp(p, "InstantaneousDemand") == 0) {
@@ -124,8 +122,6 @@ RAVEn_parseXML(char buffer[], raven_data_t *data_ptr) {
         while (p != NULL) {
             if (strcmp(p, "Demand") == 0) {
                 sscanf(strtok(NULL, "<>\n"), "0x%x", &demand_u);
-                demand = demand_u;
-                if (demand >= 2^23) demand = demand - 2^24;
             } else if (strcmp(p, "DeviceMacId") == 0) {
                 strncpy(data_ptr->macid, strtok(NULL, "<>\n"), sizeof (data_ptr->macid));
             } else if (strcmp(p, "Multiplier") == 0) {
@@ -140,6 +136,10 @@ RAVEn_parseXML(char buffer[], raven_data_t *data_ptr) {
             }
             p = strtok(NULL, "<>\n");
         }
+        demand = demand_u;
+        if (demand >= 2^23) demand = demand - 2^24;
+        snprintf(buf, sizeof (buf), "demandu 0x%x demand %d, multiplier %d, divisor %d", demand_u, demand, multiplier, divisor);
+        WriteDBGLog(buf);
         data_ptr->demand = (double) demand * (double) multiplier / (double) divisor;
         return RAVEN_PASS;
     } else {
@@ -174,7 +174,7 @@ ProcessRAVEnData(raven_t rvn, mqtt_data_t *message) {
             /* They always add two space for XML inbetween the start and stop So the closing XML will always be </    */
             if (strncmp(readBuf, "</", 2) == 0) {
                 WriteDBGLog("Starting to PROCESS RAVEn input");
-//                WriteDBGLog(xmlBuf);
+                //                WriteDBGLog(xmlBuf);
                 if (RAVEn_parseXML(xmlBuf, &rvnData) == RAVEN_PASS) {
                     snprintf(message->payload, sizeof (message->payload), "{\"timestamp\":%u,\"value\":%.3f}", time(NULL), rvnData.demand);
                     snprintf(message->topic, sizeof (message->topic), "home/%s/%s/%s", rvn.id, rvn.location, rvn.topic);

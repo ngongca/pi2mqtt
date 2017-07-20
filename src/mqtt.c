@@ -175,7 +175,7 @@ MQTT_send(MQTTClient client, mqtt_data_t *message) {
         snprintf(dbgBuf, sizeof (dbgBuf), "publishing - %s", message->payload);
         WriteDBGLog(dbgBuf);
         int i = MQTTClient_publishMessage(client, message->topic, &pubmsg, &token);
-        snprintf(dbgBuf, sizeof (dbgBuf), "Waiting for up to %d seconds for publication of %s on topic %s with token %d %d",
+        snprintf(dbgBuf, sizeof (dbgBuf), "Waiting for up to %d seconds for publication of %s on topic %s with token %d",
                 (int) (TIMEOUT / 1000), message->payload, message->topic, token);
         WriteDBGLog(dbgBuf);
         rc = MQTTClient_waitForCompletion(client, token, TIMEOUT);
