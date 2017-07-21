@@ -87,7 +87,7 @@ ProcessDoorswitchData(doorswitch_port_t* port, mqtt_data_t* message) {
         WriteDBGLog(dbgBuf);
         port->state = data;
         snprintf(message->payload, sizeof (message->payload), 
-                "{\"timestamp\":%ld,\"state\":\"%s\"}",
+                "{\"timestamp\":%ld,\"value\":\"%s\"}",
                 time(NULL), data == 1 ? "opened" : "closed");
         snprintf(message->topic, sizeof (message->topic), "home/%s/%s/%s",
                 port->id, port->location, port->topic);
