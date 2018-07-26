@@ -26,7 +26,21 @@ mqttbrokerpwd = "password"
 # This will be monitored to provide management messages back to the controller.
 mqttsubtopic = "home/+/manage"
 
+# Below is the section for the low temperature NIST temp sensors.  These sensors
+# are 2.8K NTC Thermistors. You can have
+# multiple sensors, just provide different names and topics.  You must also
+# provide the wiringPi pin number.
+#tempsensor sensor1 {
+# base = <base pin number for ADC>
+# pin = <ADC pin number>
+# addr = <I2C address of controller>
+# location = "<location>"
+# mqttpubtopic = "tempsensor"
+# sampletime = "1"
+#}
 EOF
+
+
 
   if [ -d /sys/bus/w1/devices ];
   then

@@ -29,6 +29,7 @@
 #include <stdint.h>
 #include <sys/types.h>
 #include <string.h>
+#include <time.h>
 #include <unistd.h>
 
 #include "debug.h"

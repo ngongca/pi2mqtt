@@ -28,12 +28,14 @@ AC_CHECK_HEADERS([stdlib.h])
 AC_CHECK_HEADERS([string.h])
 AC_CHECK_HEADERS([unistd.h])
 AC_CHECK_HEADERS([utime.h])
+AC_CHECK_HEADERS([math.h])
+AC_CHECK_HEADERS([time.h])
 AC_CHECK_HEADERS([MQTTClient.h])
 
 # Checks for typedefs, structures, and compiler characteristics.
 
 # Checks for library functions.
-AC_CHECK_FUNCS([memset strerror strstr])
+AC_CHECK_FUNCS([memset strerror strstr time])
 
 AC_CONFIG_FILES([Makefile
 		 src/Makefile])

@@ -25,6 +25,7 @@
 #include <stdio.h>
 #include <MQTTClient.h>
 #include <string.h>
+#include <time.h>
 #include "mqtt.h"
 
 #define QOS          1

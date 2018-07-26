@@ -40,6 +40,7 @@
 
 #include <MQTTClient.h>
 #include <confuse.h>
+#include "tempsensor.h"
 #include "ds18b20pi.h"
 #include "dht22.h"
 #include "raven.h"
@@ -71,6 +72,12 @@ typedef struct {
     long lastsample[MAXPORTS];
 } doorswitch_ports_t;
 
+typedef struct {
+    int size;
+    tempsensor_port_t ports[MAXPORTS];
+    long lastsample[MAXPORTS];
+} tempsensor_ports_t;
+
 char *gApp = "pi2mqtt";
 
 char gTempDevLoc[128];
@@ -87,6 +94,15 @@ int gCmdBufferLen;
 static cfg_t *
 read_config(char config_filename[]) {
     cfg_t *cfg;
+    static cfg_opt_t tempsensor_opts[] = {
+	CFG_INT("base", 400, CFGF_NONE),
+        CFG_INT("pin", 4, CFGF_NONE),
+	CFG_INT("addr", 0x48, CFGF_NONE),
+        CFG_STR("mqttpubtopic", "home/tempsensor", CFGF_NONE),
+        CFG_STR("location", "location", CFGF_NONE),
+        CFG_INT("sampletime", 5, CFGF_NONE),
+        CFG_END()
+    };
     static cfg_opt_t ds18b20_opts[] = {
         CFG_STR("address", "/sys/bus/w1/devices", CFGF_NONE),
         CFG_STR("mqttpubtopic", "temp", CFGF_NONE),
@@ -126,6 +142,7 @@ read_config(char config_filename[]) {
         CFG_SEC("RAVEn", raven_opts, CFGF_MULTI | CFGF_TITLE),
         CFG_SEC("dht22", dht22_opts, CFGF_MULTI | CFGF_TITLE),
         CFG_SEC("doorswitch", doorswitch_opts, CFGF_MULTI | CFGF_TITLE),
+	CFG_SEC("tempsensor", tempsensor_opts, CFGF_MULTI | CFGF_TITLE),
         CFG_END()
     };
 
@@ -142,7 +159,7 @@ read_config(char config_filename[]) {
  */
 static void
 LoadINIParms(cfg_t **config, ds18b20pi_ports_t *sensors, raven_ports_t *raven, dht22_ports_t *dht22p,
-        doorswitch_ports_t *doorswitch, mqtt_broker_t *client, char configFile[]) {
+        doorswitch_ports_t *doorswitch, tempsensor_ports_t *tempsensor, mqtt_broker_t *client, char configFile[]) {
     int i;
     cfg_t *scfg;
     char buf[64];
@@ -186,6 +203,17 @@ LoadINIParms(cfg_t **config, ds18b20pi_ports_t *sensors, raven_ports_t *raven, d
             doorswitch->lastsample[i] = 0;
         }
     }
+    for (i = 0; i < cfg_size(*config, "tempsensor"); i++) {
+        if (i < MAXPORTS) {
+            scfg = cfg_getnsec(*config, "tempsensor", i);
+            tempsensor->ports[i] = tempsensor_createPort(cfg_getint(scfg,"base"),
+		    cfg_getint(scfg, "pin"), cfg_getint(scfg,"addr"),
+                    cfg_title(scfg), cfg_getstr(scfg, "mqttpubtopic"),
+                    cfg_getstr(scfg, "location"), cfg_getint(scfg, "sampletime"));
+            tempsensor->size++;
+            tempsensor->lastsample[i] = 0;
+        }
+    }
     client->mqtthostaddr = cfg_getstr(*config, "mqttbrokeraddress");
     client->mqttclientid = cfg_getstr(*config, "clientid");
     client->mqttuid = cfg_getstr(*config, "mqttbrokeruid");
@@ -202,6 +230,7 @@ main(int argc, char** argv) {
     raven_ports_t raven_ports;
     dht22_ports_t dht22_ports;
     doorswitch_ports_t doorswitch_ports;
+    tempsensor_ports_t tempsensor_ports;
     mqtt_broker_t mclient;
     MQTTClient mqtt_client;
     my_context_t my_context;
@@ -242,7 +271,7 @@ main(int argc, char** argv) {
         }
     }
 
-    LoadINIParms(&cfg, &ds18b20_ports, &raven_ports, &dht22_ports, &doorswitch_ports, &mclient, configFile); // Initialize ports.
+    LoadINIParms(&cfg, &ds18b20_ports, &raven_ports, &dht22_ports, &doorswitch_ports, &tempsensor_ports, &mclient, configFile); // Initialize ports.
 
     InitDBGLog("pi2MQTT", cfg_getstr(cfg, "debuglogfile"), cfg_getint(cfg, "debugmode"), verbose);
     WriteDBGLog(STARTUP);
@@ -258,7 +287,7 @@ main(int argc, char** argv) {
 
     cntr = 0;
 
-    //init RAVEn
+    //Initialize all ports.
     for (i = 0; i < raven_ports.size; i++) {
         if (RAVEn_openPort(&raven_ports.ports[i]) != RAVEN_PASS) {
             WriteDBGLog("Error opening RAVEn Port");
@@ -282,6 +311,13 @@ main(int argc, char** argv) {
     if (doorswitch_init() != DOORSWITCH_SUCCESS) {
         WriteDBGLog("Error initializing Door Switches");
         exit(EXIT_FAILURE);
+    }
+    
+    for (i = 0; i < tempsensor_ports.size; i++) {
+        if (tempsensor_init(tempsensor_ports.ports[i]) != TEMPSENSOR_SUCCESS) {
+            WriteDBGLog("Error initializing tempsensor");
+            exit(EXIT_FAILURE);
+        }
     }
 
     while (!my_context.killed) {
@@ -307,6 +343,18 @@ main(int argc, char** argv) {
                 };
             }
         }
+	
+	// process tempsensors
+        for (i = 0; i < tempsensor_ports.size; i++) {
+            long t = time(NULL);
+            if (t - tempsensor_ports.lastsample[i] >= (long) tempsensor_ports.ports[i].sampletime) {
+                tempsensor_ports.lastsample[i] = t;
+                if (ProcessTempsensorData(&tempsensor_ports.ports[i], &message) == TEMPSENSOR_SUCCESS) {
+                    MQTT_send(mqtt_client, &message);
+                };
+            }
+        }
+	
         if (5 <= cntr) {
             // process dht22
             for (i = 0; i < dht22_ports.size; i++) {
