@@ -31,12 +31,14 @@ mqttsubtopic = "home/+/manage"
 # multiple sensors, just provide different names and topics.  You must also
 # provide the wiringPi pin number.
 #tempsensor sensor1 {
-# base = <base pin number for ADC>
 # pin = <ADC pin number>
-# addr = <I2C address of controller>
+# A = "00e00"
+# B = "00e00"
+# C = "00e00"
+# Rb = 0.0
 # location = "<location>"
 # mqttpubtopic = "tempsensor"
-# sampletime = "1"
+# sampletime = 1
 #}
 EOF
 

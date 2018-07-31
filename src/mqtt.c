@@ -26,12 +26,15 @@
 #include <MQTTClient.h>
 #include <string.h>
 #include <time.h>
+#include <unistd.h>
 #include "mqtt.h"
+#include "debug.h"
 
 #define QOS          1
 #define TIMEOUT      10000L
 
 static int connected = 0;
+static char* dumpFilename = MQTT_DUMP_FILE;
 
 static void
 connect_client(MQTTClient* client, mqtt_broker_t* broker) {
@@ -39,8 +42,8 @@ connect_client(MQTTClient* client, mqtt_broker_t* broker) {
     MQTTClient_connectOptions conn_opts = MQTTClient_connectOptions_initializer;
     conn_opts.keepAliveInterval = 20;
     conn_opts.cleansession = 1;
-    conn_opts.password = broker->mqttpasswd;
-    conn_opts.username = broker->mqttuid;
+    if (broker->mqttpasswd != 0) conn_opts.password = broker->mqttpasswd;
+    if (broker->mqttuid != 0) conn_opts.username = broker->mqttuid;
 
     WriteDBGLog("Attempting to connect");
     while ((MQTTClient_connect(*client, &conn_opts)) != MQTTCLIENT_SUCCESS) {
@@ -61,14 +64,13 @@ connlost(void *context, char *cause) {
     FILE *fp;
     char buf[1024];
     mqtt_data_t data;
-    char *filename = "./dump";
     char *topic = "home/pi2mqtt/mgmnt";
     
     connected = 0;
     
     snprintf(buf, 64, "Broker connection lost. Cause: %s\n", cause);
     WriteDBGLog(buf);
-    fp = fopen(filename, "w");
+    fp = fopen(dumpFilename, "w");
     fclose(fp);
         
     // Let the broker know when the connection was lost
@@ -79,7 +81,7 @@ connlost(void *context, char *cause) {
     
     connect_client(c->client, c->broker);
     connected = 1;
-    if ((fp = fopen(filename, "r")) != NULL) {
+    if ((fp = fopen(dumpFilename, "r")) != NULL) {
         while (fgets(buf, sizeof (buf), fp) != NULL) {
             sscanf(buf, "%s\n", data.topic);
             fgets(buf, sizeof (buf), fp);
@@ -132,9 +134,8 @@ msgarrvd(void *context, char* topicName, int topicLen, MQTTClient_message *messa
 static void
 mqtt_save(const mqtt_data_t msg) {
     FILE *fp;
-    char *filename = "./dump";
 
-    if ((fp = fopen(filename, "a")) == NULL) {
+    if ((fp = fopen(dumpFilename, "a")) == NULL) {
         WriteDBGLog("error opening persistence file");
     }
 

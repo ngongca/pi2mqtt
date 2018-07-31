@@ -40,6 +40,17 @@
 #define TEMPSENSOR_FAILURE -1  ///< failure indicator
 #endif
 
+#ifndef ADC_BASE
+#define ADC_BASE 400 ///< base for ADC address
+#endif
+
+#ifndef ADC_I2C_ADDR
+#define ADC_I2C_ADDR 72 ///< i2c address for ADC
+#endif
+
+#ifndef ADC_LSB
+#define ADC_LSB 125e-06  ///< LSB for ADC calculation
+#endif
 
 #ifdef __cplusplus
 extern "C" {
@@ -48,9 +59,7 @@ extern "C" {
     #include "mqtt.h"
 
     typedef struct {
-	int base; ///< base pin address.  Needed for wiring pi.
         int pin; ///< pin number of a2d this port is attached [0-4]]
-	int addr; ///< i2c address
 	double A; ///< Parameter for Steinhart Hart equation
 	double B; ///< Parameter for Steinhart Hart equation
 	double C; ///< Parameter for Steinhart Hart equation
@@ -64,9 +73,7 @@ extern "C" {
 
     /**
      * \brief Create a new door switch port
-     * @param base - base pin number for a2d  >200
      * @param pin - a2d pin number [0-4]
-     * @param addr - i2c address
      * @param A; ///< Parameter for Steinhart Hart equation
      * @param B; ///< Parameter for Steinhart Hart equation
      * @param C; ///< Parameter for Steinhart Hart equation
@@ -77,7 +84,7 @@ extern "C" {
      * @param sampletime - sample time in seconds
      * @return a configured port
      */
-    extern tempsensor_port_t tempsensor_createPort(const int base, const int pin, const int addr, 
+    extern tempsensor_port_t tempsensor_createPort(const int pin,  
 	    const double A, const double B, const double C, const double Rb, const char* id,
             const char* topic, const char* location, int sampletime);
 
@@ -86,7 +93,7 @@ extern "C" {
      * @param port - port to init
      * @return TEMPSENSOR_SUCCESS if initialization is good.
      */
-    extern int tempsensor_init( tempsensor_port_t port);
+    extern int tempsensor_init();
 
     /**
      * \brief Process door switch port data.

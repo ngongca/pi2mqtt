@@ -28,6 +28,10 @@
 #define MQTT_FAILURE -1
 #endif
 
+#ifndef MQTT_DUMP_FILE
+#define MQTT_DUMP_FILE "./dump"
+#endif
+
 #ifdef __cplusplus
 extern "C" {
 #endif
