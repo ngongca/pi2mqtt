@@ -90,7 +90,7 @@ ProcessDoorswitchData(doorswitch_port_t* port, mqtt_data_t* message) {
         snprintf(message->payload, sizeof (message->payload), 
                 "{\"timestamp\":%ld,\"value\":\"%s\"}",
                 time(NULL), data == 1 ? "opened" : "closed");
-        snprintf(message->topic, sizeof (message->topic), "home/%s/%s/%s",
+        snprintf(message->topic, sizeof (message->topic), "%s/%s/%s",
                 port->id, port->location, port->topic);
         rc = DOORSWITCH_SUCCESS;
     } 

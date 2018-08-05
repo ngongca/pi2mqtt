@@ -1,12 +1,17 @@
 #!/bin/bash
 
-if [ -f "template.conf" ]; then
-  echo "pi2mqtt_setup template.conf exists, no new one created"
+sn=$(cat /proc/cpuinfo | grep Serial | awk '{print $3}')
+filename="rpi$sn.conf"
+
+if [ -f $filename ]; then
+  echo "init_pi2mqtt - $filename exists, no new one created"
 else
-  echo "pi2mqtt_setup creating template.conf"
-  cat << EOF > template.conf
-# template.conf - configuration file to provide to the pi2mqtt tool.  
+  echo "init_pi2mqtt - creating $filename"
+  cat << EOF > $filename
+# $filename configuration file to provide to the pi2mqtt tool.  
 # This file sets devices up so that pi2mqtt will monitor.
+
+home = rpi$sn
 
 # client ID for the mqtt sensor controller (usually the microcontroller id 
 # such as the PI  THIS MUST BE A UNIQUE identifier)
@@ -24,7 +29,7 @@ mqttbrokerpwd = "password"
 
 # topic for the sensor controller's management port.  
 # This will be monitored to provide management messages back to the controller.
-mqttsubtopic = "home/+/manage"
+mqttsubtopic = "rpi$sn/manage/+"
 
 # Below is the section for the low temperature NIST temp sensors.  These sensors
 # are 2.8K NTC Thermistors. You can have
@@ -42,11 +47,9 @@ mqttsubtopic = "home/+/manage"
 #}
 EOF
 
-
-
   if [ -d /sys/bus/w1/devices ];
   then
-    cat << EOF4 >> template.conf
+    cat << EOF4 >> $filename
 # Below are detected one-wire devices.  If you wish to enable them, update
 # the parameters and remove the comment lines.
 # Parameters are as follows:
@@ -77,11 +80,11 @@ EOF4
       fi
     done
   else
-    echo "pi2mqtt_setup - no one wire devices found"
+    echo "init_pi2mqtt - no one wire devices found"
   fi
   if [ -c /dev/ttyUSB0 ];
   then
-    cat << EOF1 >> template.conf
+    cat << EOF1 >> $filename
 
 # uncomment the next series if you have a RAVEn device attached to the rpi 
 # and want to monitor.  Ensure the serial USB is available
@@ -93,11 +96,10 @@ EOF4
 
 EOF1
   else
-    echo "pi2mqtt_setup - no USB device found, assuming no RAVEn"
+    echo "init_pi2mqtt - no USB device found, assuming no RAVEn"
   fi
-
  
-  cat << EOF2 >> template.conf
+  cat << EOF2 >> $filename
 # uncomment the next series if you have a DHT22/11 device attached to the rpi
 # and want to monitor.  Set the pin location if different.
 #dht22 dht22 {
@@ -124,8 +126,83 @@ debuglogfile = "./temp2mqtt.log"
 
 EOF2
 
-
 fi
 
+fullfilename=$(pwd)/$filename
+
+if [ -f pi2mqtt.sh ]; then
+  echo "init_pi2mqtt - pi2mqtt.sh exists, no new one created"
+else
+  echo "init_pi2mqtt - creating pi2mqtt.sh"
+cat << "EOF5" >> pi2mqtt.sh
+#!/bin/sh
+
+### BEGIN INIT INFO
+# Provides:          pi2mqtt
+# Required-Start:    $local_fs $network
+# Required-Stop:     $local_fs
+# Default-Start:     2 3 4 5
+# Default-Stop:      0 1 6
+# Short-Description: pi2mqtt service
+# Description:       Runs pi2mqtt service
+### END INIT INFO
+
+# Carry out specific functions when asked to by the system
+EOF5
+echo "SCRIPT=/usr/local/bin/pi2mqtt -c $fullfilename" >> pi2mqtt.sh
+cat << "EOF6" >> pi2mqtt.sh
+RUNAS=pi
+
+PIDFILE=/var/run/pi2mqtt.pid
+LOGFILE=/var/log/pi2mqtt.log
+
+start() {
+  if [ -f /var/run/$PIDNAME ] && kill -0 $(cat /var/run/$PIDNAME); then
+    echo 'Service already running' >&2
+    return 1
+  fi
+  echo 'Starting service…' >&2
+  local CMD="$SCRIPT &> \"$LOGFILE\" & echo \$!"
+  su -c "$CMD" $RUNAS > "$PIDFILE"
+  echo 'Service started' >&2
+}
+
+stop() {
+  if [ ! -f "$PIDFILE" ] || ! kill -0 $(cat "$PIDFILE"); then
+    echo 'Service not running' >&2
+    return 1
+  fi
+  echo 'Stopping service…' >&2
+  kill -15 $(cat "$PIDFILE") && rm -f "$PIDFILE"
+  echo 'Service stopped' >&2
+}
+
+
+case "$1" in
+  start)
+    start
+    ;;
+  stop)
+    stop
+    ;;
+  retart)
+    stop
+    start
+    ;;
+  *)
+    echo "Usage: $0 {start|stop|restart}"
+esac
+EOF6
+
+echo " "
+echo "!!!!!!!!!!!!"
+echo "init_pi2mqtt - You must copy pi2mqtt.sh into /etc/init.d/ and enable"
+echo "               $ sudo cp pi2mqtt.sh /etc/init.d/pi2mqtt"
+echo "               $ sudo chmod +x /etc/init.d/pi2mqtt"
+echo "               $ sudo update-rc.d service"
+echo " "
+echo "               Ensure that /var/log/pi2mqtt/ is available"
+
+fi
 
 

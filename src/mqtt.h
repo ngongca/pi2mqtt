@@ -40,6 +40,7 @@ extern "C" {
         char* mqttuid;  ///< MQTT broker user id
         char* mqtthostaddr; ///< MQTT broker host address
         char* mqttclientid; ///< Unique client id to connect to broker.
+	char* mqtthome; ///< home section of topic
     } mqtt_broker_t;
 
     typedef struct {
@@ -55,7 +56,7 @@ extern "C" {
     } mqtt_data_t;
 
     extern void MQTT_sub(MQTTClient client, const char* topic);
-    extern int MQTT_send(MQTTClient client, mqtt_data_t* message);
+    extern int MQTT_send(mqtt_broker_t broker, MQTTClient client, mqtt_data_t* message);
     extern int MQTT_init(void* context, MQTTClient* client, mqtt_broker_t* broker);
 
 #ifdef __cplusplus

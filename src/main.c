@@ -137,7 +137,8 @@ read_config(char config_filename[]) {
 	CFG_STR("mqttbrokeraddress", "localhost", CFGF_NONE),
 	CFG_STR("mqttbrokeruid", 0, CFGF_NONE),
 	CFG_STR("mqttbrokerpwd", 0, CFGF_NONE),
-	CFG_STR("mqttsubtopic", "home/+/manage", CFGF_NONE),
+	CFG_STR("mqttsubtopic", "rpi/manage/+", CFGF_NONE),
+	CFG_STR("home", "rpi", CFGF_NONE),
 	CFG_STR("clientid", "id", CFGF_NONE),
 	CFG_STR("debuglogfile", "./debug.log", CFGF_NONE),
 	CFG_INT("debugmode", 0, CFGF_NONE),
@@ -162,7 +163,7 @@ read_config(char config_filename[]) {
  */
 static void
 LoadINIParms(cfg_t **config, ds18b20pi_ports_t *sensors, raven_ports_t *raven, dht22_ports_t *dht22p,
-	doorswitch_ports_t *doorswitch, tempsensor_ports_t *tempsensor, mqtt_broker_t *client, char configFile[]) {
+	doorswitch_ports_t *doorswitch, tempsensor_ports_t *tempsensor, mqtt_broker_t *broker, char configFile[]) {
     int i;
     cfg_t *scfg;
     char buf[64];
@@ -221,10 +222,11 @@ LoadINIParms(cfg_t **config, ds18b20pi_ports_t *sensors, raven_ports_t *raven, d
 	    tempsensor->lastsample[i] = 0;
 	}
     }
-    client->mqtthostaddr = cfg_getstr(*config, "mqttbrokeraddress");
-    client->mqttclientid = cfg_getstr(*config, "clientid");
-    client->mqttuid = cfg_getstr(*config, "mqttbrokeruid");
-    client->mqttpasswd = cfg_getstr(*config, "mqttbrokerpwd");
+    broker->mqtthostaddr = cfg_getstr(*config, "mqttbrokeraddress");
+    broker->mqttclientid = cfg_getstr(*config, "clientid");
+    broker->mqttuid = cfg_getstr(*config, "mqttbrokeruid");
+    broker->mqttpasswd = cfg_getstr(*config, "mqttbrokerpwd");
+    broker->mqtthome = cfg_getstr(*config,"home");
 
 }
 
@@ -238,7 +240,7 @@ main(int argc, char** argv) {
     dht22_ports_t dht22_ports;
     doorswitch_ports_t doorswitch_ports;
     tempsensor_ports_t tempsensor_ports;
-    mqtt_broker_t mclient;
+    mqtt_broker_t mqtt_broker;
     MQTTClient mqtt_client;
     my_context_t my_context;
     mqtt_data_t message;
@@ -279,16 +281,16 @@ main(int argc, char** argv) {
 	}
     }
 
-    LoadINIParms(&cfg, &ds18b20_ports, &raven_ports, &dht22_ports, &doorswitch_ports, &tempsensor_ports, &mclient, configFile); // Initialize ports.
+    LoadINIParms(&cfg, &ds18b20_ports, &raven_ports, &dht22_ports, &doorswitch_ports, &tempsensor_ports, &mqtt_broker, configFile); // Initialize ports.
 
     InitDBGLog("pi2MQTT", cfg_getstr(cfg, "debuglogfile"), cfg_getint(cfg, "debugmode"), verbose);
     WriteDBGLog(STARTUP);
 
     my_context.killed = 0;
-    if (MQTT_init(&my_context, &mqtt_client, &mclient) == MQTT_FAILURE) {
+    if (MQTT_init(&my_context, &mqtt_client, &mqtt_broker) == MQTT_FAILURE) {
 	exit(EXIT_FAILURE);
     }
-    my_context.broker = &mclient;
+    my_context.broker = &mqtt_broker;
     my_context.client = &mqtt_client;
 
     MQTT_sub(mqtt_client, cfg_getstr(cfg, "mqttsubtopic"));
@@ -338,7 +340,7 @@ main(int argc, char** argv) {
 	    if (t - ds18b20_ports.lastsample[i] >= (long) ds18b20_ports.ports[i].sampletime) {
 		ds18b20_ports.lastsample[i] = t;
 		if (DS18B20PI_process_data(ds18b20_ports.ports[i], &message) == DS18B20PI_SUCCESS) {
-		    MQTT_send(mqtt_client, &message);
+		    MQTT_send(mqtt_broker, mqtt_client, &message);
 		} else {
 		    WriteDBGLog("Failed to read temperature sensor");
 		}
@@ -351,7 +353,7 @@ main(int argc, char** argv) {
 	    if (t - doorswitch_ports.lastsample[i] >= (long) doorswitch_ports.ports[i].sampletime) {
 		doorswitch_ports.lastsample[i] = t;
 		if (ProcessDoorswitchData(&doorswitch_ports.ports[i], &message) == DOORSWITCH_SUCCESS) {
-		    MQTT_send(mqtt_client, &message);
+		    MQTT_send(mqtt_broker, mqtt_client, &message);
 		};
 	    }
 	}
@@ -362,7 +364,7 @@ main(int argc, char** argv) {
 	    if (t - tempsensor_ports.lastsample[i] >= (long) tempsensor_ports.ports[i].sampletime) {
 		tempsensor_ports.lastsample[i] = t;
 		if (ProcessTempsensorData(&tempsensor_ports.ports[i], &message) == TEMPSENSOR_SUCCESS) {
-		    MQTT_send(mqtt_client, &message);
+		    MQTT_send(mqtt_broker, mqtt_client, &message);
 		};
 	    }
 	}
@@ -371,7 +373,7 @@ main(int argc, char** argv) {
 	    // process dht22
 	    for (i = 0; i < dht22_ports.size; i++) {
 		if (DHT22_process_temperature(dht22_ports.ports[i], &message) == DHT22_SUCCESS) {
-		    MQTT_send(mqtt_client, &message);
+		    MQTT_send(mqtt_broker, mqtt_client, &message);
 		};
 	    }
 	    cntr = 0;
@@ -379,7 +381,7 @@ main(int argc, char** argv) {
 
 	for (i = 0; i < raven_ports.size; i++) {
 	    if (ProcessRAVEnData(raven_ports.ports[i], &message) == RAVEN_PASS) {
-		MQTT_send(mqtt_client, &message);
+		MQTT_send(mqtt_broker, mqtt_client, &message);
 	    }
 	}
 	cntr++;

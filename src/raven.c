@@ -177,7 +177,7 @@ ProcessRAVEnData(raven_t rvn, mqtt_data_t *message) {
                 //                WriteDBGLog(xmlBuf);
                 if (RAVEn_parseXML(xmlBuf, &rvnData) == RAVEN_PASS) {
                     snprintf(message->payload, sizeof (message->payload), "{\"timestamp\":%u,\"value\":%.3f}", time(NULL), rvnData.demand);
-                    snprintf(message->topic, sizeof (message->topic), "home/%s/%s/%s", rvn.id, rvn.location, rvn.topic);
+                    snprintf(message->topic, sizeof (message->topic), "%s/%s/%s", rvn.id, rvn.location, rvn.topic);
                     retval = RAVEN_PASS;
                     break;
                 }

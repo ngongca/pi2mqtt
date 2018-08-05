@@ -48,7 +48,7 @@ DS18B20PI_createPort(const char *path, const char *id, const char *topic, const 
     DS18B20PI_port_t port;
     strncpy(port.id, id, sizeof (port.id));
     strncpy(port.path, path, sizeof (port.path));
-    snprintf(port.topic, sizeof (port.topic), "home/%s/%s/%s", id, location, topic);
+    snprintf(port.topic, sizeof (port.topic), "%s/%s/%s", id, location, topic);
     strncpy(port.location, location, sizeof (port.location));
     port.sampletime = sampletime;
     port.fahrenheitscale = isFahrenheit;

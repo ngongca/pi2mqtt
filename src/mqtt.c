@@ -64,7 +64,7 @@ connlost(void *context, char *cause) {
     FILE *fp;
     char buf[1024];
     mqtt_data_t data;
-    char *topic = "home/pi2mqtt/mgmnt";
+    char *topic = "pi2mqtt/mgmt";
     
     connected = 0;
     
@@ -76,8 +76,8 @@ connlost(void *context, char *cause) {
     // Let the broker know when the connection was lost
     snprintf(data.payload,sizeof(data.payload), 
             "{\"timestamp\":%ld,\"connection\":\"lost\"}", time(NULL));
-    snprintf(data.topic,sizeof(data.topic),"%s",topic);
-    MQTT_send(*c->client, &data);
+    snprintf(data.topic,sizeof(data.topic),"%s/%s",c->broker->mqtthome,topic);
+    MQTT_send(*c->broker, *c->client, &data);
     
     connect_client(c->client, c->broker);
     connected = 1;
@@ -88,14 +88,14 @@ connlost(void *context, char *cause) {
             sscanf(buf, "%s\n", data.payload);
             sprintf(buf, "publishing stored data to %s", data.topic);
             WriteDBGLog(buf);
-            MQTT_send(*c->client, &data);
+            MQTT_send(*c->broker, *c->client, &data);
         }
         fclose(fp);
     }
     snprintf(data.payload,sizeof(data.payload), 
             "{\"timestamp\":%ld,\"connection\":\"reconnected\"}", time(NULL));
     snprintf(data.topic,sizeof(data.topic),"%s",topic);
-    MQTT_send(*c->client, &data);
+    MQTT_send(*c->broker, *c->client, &data);
 }
 
 static void
@@ -125,14 +125,14 @@ msgarrvd(void *context, char* topicName, int topicLen, MQTTClient_message *messa
     if (strstr(msg, "kill") != NULL) {
         c->killed = 1;
     }
-    WriteDBGLog("here");
+    WriteDBGLog("pi2mqtt killed via mqtt topic");
     MQTTClient_freeMessage(&message);
     MQTTClient_free(topicName);
     return 1;
 }
 
 static void
-mqtt_save(const mqtt_data_t msg) {
+mqtt_save(const mqtt_broker_t broker, const mqtt_data_t msg) {
     FILE *fp;
 
     if ((fp = fopen(dumpFilename, "a")) == NULL) {
@@ -141,7 +141,7 @@ mqtt_save(const mqtt_data_t msg) {
 
     WriteDBGLog("Saving msg to file");
 
-    fprintf(fp, "%s\n", msg.topic);
+    fprintf(fp, "%s/%s\n", broker.mqtthome, msg.topic);
     fprintf(fp, "%s\n", msg.payload);
 
     fclose(fp);
@@ -163,10 +163,10 @@ MQTT_sub(MQTTClient client, const char *topic) {
  * @return 
  */
 int
-MQTT_send(MQTTClient client, mqtt_data_t *message) {
+MQTT_send(mqtt_broker_t broker, MQTTClient client, mqtt_data_t *message) {
     MQTTClient_message pubmsg = MQTTClient_message_initializer;
     MQTTClient_deliveryToken token;
-    char dbgBuf[256];
+    char buf[256];
     int rc;
 
     if (connected == 1) {
@@ -174,17 +174,18 @@ MQTT_send(MQTTClient client, mqtt_data_t *message) {
         pubmsg.payloadlen = strlen(message->payload);
         pubmsg.qos = QOS;
         pubmsg.retained = 0;
-        snprintf(dbgBuf, sizeof (dbgBuf), "publishing - %s", message->payload);
-        WriteDBGLog(dbgBuf);
-        int i = MQTTClient_publishMessage(client, message->topic, &pubmsg, &token);
-        snprintf(dbgBuf, sizeof (dbgBuf), "Waiting for up to %d seconds for publication of %s on topic %s with token %d",
+        snprintf(buf, sizeof (buf), "publishing - %s", message->payload);
+        WriteDBGLog(buf);
+	snprintf(buf, sizeof (buf), "%s/%s", broker.mqtthome, message->topic);
+        int i = MQTTClient_publishMessage(client, buf, &pubmsg, &token);
+        snprintf(buf, sizeof (buf), "Waiting for up to %d seconds for publication of %s on topic %s with token %d",
                 (int) (TIMEOUT / 1000), message->payload, message->topic, token);
-        WriteDBGLog(dbgBuf);
+        WriteDBGLog(buf);
         rc = MQTTClient_waitForCompletion(client, token, TIMEOUT);
-        snprintf(dbgBuf, sizeof (dbgBuf), "Message with delivery token %d delivered", token);
-        WriteDBGLog(dbgBuf);
+        snprintf(buf, sizeof (buf), "Message with delivery token %d delivered", token);
+        WriteDBGLog(buf);
     } else
-        mqtt_save(*message);
+        mqtt_save(broker, *message);
 }
 
 int
@@ -202,6 +203,7 @@ MQTT_init(void* context, MQTTClient *mqttClient, mqtt_broker_t *broker) {
         rc = MQTT_FAILURE;
     } else {
         MQTTClient_setCallbacks(*mqttClient, context, connlost, msgarrvd, delivered);
+	//@todo Set up LWT for the PI.  If it goes down, publish a message.
         connect_client(mqttClient, broker);
         connected = 1;
         rc = MQTT_SUCCESS;

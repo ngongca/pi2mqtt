@@ -133,7 +133,7 @@ ProcessTempsensorData(tempsensor_port_t* port, mqtt_data_t* message) {
     snprintf(message->payload, sizeof (message->payload),
 	    "{\"timestamp\":%ld,\"value\":\"%.2f\"}",
 	    time(NULL), t);
-    snprintf(message->topic, sizeof (message->topic), "home/%s/%s/%s",
+    snprintf(message->topic, sizeof (message->topic), "%s/%s/%s",
 	    port->id, port->location, port->topic);
     rc = TEMPSENSOR_SUCCESS;
     return rc;
