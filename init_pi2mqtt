@@ -149,12 +149,12 @@ cat << "EOF5" >> pi2mqtt.sh
 
 # Carry out specific functions when asked to by the system
 EOF5
-echo "SCRIPT=/usr/local/bin/pi2mqtt -c $fullfilename" >> pi2mqtt.sh
+echo "SCRIPT=\"/usr/local/bin/pi2mqtt -c $fullfilename\"" >> pi2mqtt.sh
 cat << "EOF6" >> pi2mqtt.sh
 RUNAS=pi
 
 PIDFILE=/var/run/pi2mqtt.pid
-LOGFILE=/var/log/pi2mqtt.log
+LOGFILE=/var/log/pi2mqtt/pi2mqtt.log
 
 start() {
   if [ -f /var/run/$PIDNAME ] && kill -0 $(cat /var/run/$PIDNAME); then
@@ -199,9 +199,11 @@ echo "!!!!!!!!!!!!"
 echo "init_pi2mqtt - You must copy pi2mqtt.sh into /etc/init.d/ and enable"
 echo "               $ sudo cp pi2mqtt.sh /etc/init.d/pi2mqtt"
 echo "               $ sudo chmod +x /etc/init.d/pi2mqtt"
-echo "               $ sudo update-rc.d service"
+echo "               $ sudo update-rc.d pi2mqtt defaults"
 echo " "
 echo "               Ensure that /var/log/pi2mqtt/ is available"
+echo "               $ sudo mkdir /var/log/pi2mqtt/"
+echo "               $ sudo chown pi /var/log/pi2mqtt"
 
 fi
 
