@@ -14,7 +14,7 @@
 #ifndef MQTT_H
 #define MQTT_H
 
-#include <MQTTClient.h>
+#include <MQTTAsync.h>
 
 #define MAXPORTS 32
 #define MQTT_MAXPAYLOAD 512
@@ -41,12 +41,15 @@ extern "C" {
         char* mqtthostaddr; ///< MQTT broker host address
         char* mqttclientid; ///< Unique client id to connect to broker.
 	char* mqtthome; ///< home section of topic
+	char* mqttmanagementtopic; ///< subscription topic for management
     } mqtt_broker_t;
 
     typedef struct {
         int killed; ///< flag to kill loop
-        MQTTClient* client; ///< the current client.
+	int connected; ///<flag to indicate current client is connected.
+        MQTTAsync* client; ///< the current client.
         mqtt_broker_t* broker; ///< the current broker information.
+	MQTTAsync_token token;
     } my_context_t;
     
     
@@ -55,9 +58,9 @@ extern "C" {
         char topic[MQTT_MAXTOPIC]; ///< mqtt publishing topic
     } mqtt_data_t;
 
-    extern void MQTT_sub(MQTTClient client, const char* topic);
-    extern int MQTT_send(mqtt_broker_t broker, MQTTClient client, mqtt_data_t* message);
-    extern int MQTT_init(void* context, MQTTClient* client, mqtt_broker_t* broker);
+    extern void MQTT_sub(MQTTAsync client, const char* topic);
+    extern int MQTT_send(void* context, mqtt_data_t* message);
+    extern int MQTT_init(void* context);
 
 #ifdef __cplusplus
 }
