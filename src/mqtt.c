@@ -62,25 +62,18 @@ onReconnect(void* context, char* response) {
     FILE *fp;
     char buf[1024];
     mqtt_data_t data;
+    
+struct timespec delay;
+    delay.tv_nsec = 100000;
+    delay.tv_sec = 0;
 
     // connected = 0 is first time through, not a reconnect.
     if (c->connected == 0) {
 	c->connected = 1;
 	WriteDBGLog("Successful reconnection");
-	if ((fp = fopen(dumpFilename, "r")) != NULL) {
-	    while (fgets(buf, sizeof (buf), fp) != NULL) {
-		sscanf(buf, "%s\n", data.topic);
-		fgets(buf, sizeof (buf), fp);
-		sscanf(buf, "%s\n", data.payload);
-		snprintf(buf, sizeof (buf), "publishing %s to %s", data.payload, data.topic);
-		WriteDBGLog(buf);
-		MQTT_send(c, &data);
-	    }
-	    fclose(fp);
-	}
 	snprintf(data.payload, sizeof (data.payload),
 		"{\"timestamp\":%ld,\"connection\":\"reconnected\"}", time(NULL));
-	snprintf(data.topic, sizeof (data.topic), "%s", c->broker->mqttmanagementtopic);
+	snprintf(data.topic, sizeof (data.topic), "%s", "manage");
 	MQTT_send(c, &data);
     }
 }
@@ -92,31 +85,6 @@ onSubscribeFailure(void* context, MQTTAsync_failureData* response) {
     snprintf(buf, sizeof (buf), "Subscribe failed, rc %d\n", response ? response->code : 0);
     WriteDBGLog(buf);
     c->killed = 1;
-}
-
-static void
-connect_client(void *context) {
-    char buf[128];
-    int rc;
-    my_context_t *c = (my_context_t *) context;
-    MQTTAsync_connectOptions conn_opts = MQTTAsync_connectOptions_initializer;
-    conn_opts.keepAliveInterval = 20;
-    conn_opts.cleansession = 1;
-    conn_opts.context = context;
-    conn_opts.onSuccess = onConnect;
-    conn_opts.onFailure = onConnectFailure;
-    conn_opts.automaticReconnect = 1;
-    if (c->broker->mqttpasswd != 0) conn_opts.password = c->broker->mqttpasswd;
-    if (c->broker->mqttuid != 0) conn_opts.username = c->broker->mqttuid;
-
-    WriteDBGLog("Attempting to connect");
-    if ((rc = (MQTTAsync_connect(*c->client, &conn_opts))) != MQTTASYNC_SUCCESS) {
-	snprintf(buf, sizeof (buf),
-		"Failed to start connect user: %s, password: %s return code %d",
-		conn_opts.username, conn_opts.password, rc);
-	WriteDBGLog(buf);
-	exit(MQTT_FAILURE);
-    }
 }
 
 static void
@@ -137,7 +105,7 @@ onConnlost(void *context, char *cause) {
     // Let the broker know when the connection was lost
     snprintf(data.payload, sizeof (data.payload),
 	    "{\"timestamp\":%ld,\"connection\":\"lost\"}", time(NULL));
-    snprintf(data.topic, sizeof (data.topic), "%s", c->broker->mqttmanagementtopic);
+    snprintf(data.topic, sizeof (data.topic), "%s", "manage");
     MQTT_send(c, &data);
 
     /*    conn_opts.keepAliveInterval = 20;
@@ -240,7 +208,7 @@ MQTT_send(void *context, mqtt_data_t *message) {
     my_context_t *c = (my_context_t *) context;
     char buf[256];
 
-    if (c->connected == 1) {
+ /*   if (c->connected == 1) { */
 	MQTTAsync_responseOptions opts = MQTTAsync_responseOptions_initializer;
 	MQTTAsync_message pubmsg = MQTTAsync_message_initializer;
 	int rc;
@@ -261,10 +229,11 @@ MQTT_send(void *context, mqtt_data_t *message) {
 	    c->killed = 1;
 	    return (MQTT_FAILURE);
 	}
-
+/*
     } else {
 	mqtt_save(c->broker, *message);
     }
+ */
     return (MQTT_SUCCESS);
 }
 
@@ -278,11 +247,13 @@ MQTT_init(void* context) {
     c->connected = 0;
     MQTTAsync_connectOptions conn_opts = MQTTAsync_connectOptions_initializer;
     MQTTAsync_disconnectOptions disc_opts = MQTTAsync_disconnectOptions_initializer;
+    MQTTAsync_createOptions create_opts = MQTTAsync_createOptions_initializer;
 
     rc = MQTT_SUCCESS;
-    ///@todo Implement Persistence 
-    if (MQTTAsync_create(c->client, c->broker->mqtthostaddr, c->broker->mqttclientid,
-	    MQTTCLIENT_PERSISTENCE_NONE, NULL) != MQTTASYNC_SUCCESS) {
+    create_opts.sendWhileDisconnected = 1;
+    create_opts.maxBufferedMessages = 600;
+    if (MQTTAsync_createWithOptions(c->client, c->broker->mqtthostaddr, c->broker->mqttclientid,
+	    MQTTCLIENT_PERSISTENCE_NONE, NULL, &create_opts) != MQTTASYNC_SUCCESS) {
 	snprintf(buf, sizeof (buf), "Could not create MQTT Client at %s uid %s password: %s",
 		c->broker->mqtthostaddr, c->broker->mqttuid, c->broker->mqttpasswd);
 	WriteDBGLog(buf);
@@ -291,7 +262,23 @@ MQTT_init(void* context) {
     } else {
 	MQTTAsync_setCallbacks(*c->client, context, onConnlost, onMsgArrvd, NULL);
 	MQTTAsync_setConnected(*c->client, context, onReconnect);
-	connect_client(context);
+	conn_opts.keepAliveInterval = 20;
+	conn_opts.cleansession = 1;
+	conn_opts.context = context;
+	conn_opts.onSuccess = onConnect;
+	conn_opts.onFailure = onConnectFailure;
+	conn_opts.automaticReconnect = 1;
+	if (c->broker->mqttpasswd != 0) conn_opts.password = c->broker->mqttpasswd;
+	if (c->broker->mqttuid != 0) conn_opts.username = c->broker->mqttuid;
+
+	WriteDBGLog("Attempting to connect");
+	if ((rc = (MQTTAsync_connect(*c->client, &conn_opts))) != MQTTASYNC_SUCCESS) {
+	    snprintf(buf, sizeof (buf),
+		    "Failed to start connect user: %s, password: %s return code %d",
+		    conn_opts.username, conn_opts.password, rc);
+	    WriteDBGLog(buf);
+	    exit(MQTT_FAILURE);
+	}
 	rc = MQTT_SUCCESS;
     }
     return rc;
