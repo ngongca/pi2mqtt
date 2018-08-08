@@ -46,10 +46,11 @@ extern "C" {
 
     typedef struct {
         int killed; ///< flag to kill loop
+	int reboot; ///< flag to reboot system program
 	int connected; ///<flag to indicate current client is connected.
         MQTTAsync* client; ///< the current client.
         mqtt_broker_t* broker; ///< the current broker information.
-	MQTTAsync_token token;
+	char *configFile; ///< configuration file use at boot
     } my_context_t;
     
     
@@ -58,8 +59,8 @@ extern "C" {
         char topic[MQTT_MAXTOPIC]; ///< mqtt publishing topic
     } mqtt_data_t;
 
-    extern void MQTT_sub(MQTTAsync client, const char* topic);
-    extern int MQTT_send(void* context, mqtt_data_t* message);
+    extern void mqttSub(MQTTAsync client, const char* topic);
+    extern int mqttPublish(void* context, mqtt_data_t* message);
     extern int MQTT_init(void* context);
 
 #ifdef __cplusplus

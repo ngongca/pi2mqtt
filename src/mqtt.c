@@ -39,7 +39,7 @@ static void
 onConnectFailure(void* context, MQTTAsync_failureData* response) {
     char buf[256];
     my_context_t *c = (my_context_t *) context;
-    snprintf(buf, sizeof (buf), "Connect failed, rc %d\n", response ? response->code : 0);
+    snprintf(buf, sizeof (buf), "Connect failed, rc %d", response ? response->code : 0);
     WriteDBGLog(buf);
 }
 
@@ -48,12 +48,12 @@ onConnect(void* context, MQTTAsync_successData* response) {
     my_context_t *c = (my_context_t *) context;
     c->connected = 1;
     WriteDBGLog("Successful connection");
-    MQTT_sub(c, c->broker->mqttmanagementtopic);
+    mqttSub(c, c->broker->mqttmanagementtopic);
 }
 
 void
 onSubscribe(void* context, MQTTAsync_successData* response) {
-    printf("Subscribe succeeded\n");
+    WriteDBGLog("Subscribe succeeded\n");
 }
 
 static void
@@ -62,19 +62,29 @@ onReconnect(void* context, char* response) {
     FILE *fp;
     char buf[1024];
     mqtt_data_t data;
-    
-struct timespec delay;
-    delay.tv_nsec = 100000;
-    delay.tv_sec = 0;
+
+    WriteDBGLog("onReconnect - entry");
 
     // connected = 0 is first time through, not a reconnect.
     if (c->connected == 0) {
 	c->connected = 1;
-	WriteDBGLog("Successful reconnection");
+	WriteDBGLog("onReconnect - Successful reconnection");
+	mqttSub(c, c->broker->mqttmanagementtopic);
+	if ((fp = fopen(dumpFilename, "r")) != NULL) {
+	    while (fgets(buf, sizeof (buf), fp) != NULL) {
+		sscanf(buf, "%s\n", data.topic);
+		fgets(buf, sizeof (buf), fp);
+		sscanf(buf, "%s\n", data.payload);
+		snprintf(buf, sizeof (buf), "publishing %s to %s", data.payload, data.topic);
+		WriteDBGLog(buf);
+		mqttPublish(c, &data);
+	    }
+	    fclose(fp);
+	}
 	snprintf(data.payload, sizeof (data.payload),
 		"{\"timestamp\":%ld,\"connection\":\"reconnected\"}", time(NULL));
 	snprintf(data.topic, sizeof (data.topic), "%s", "manage");
-	MQTT_send(c, &data);
+	mqttPublish(c, &data);
     }
 }
 
@@ -82,13 +92,13 @@ static void
 onSubscribeFailure(void* context, MQTTAsync_failureData* response) {
     char buf[128];
     my_context_t *c = (my_context_t *) context;
-    snprintf(buf, sizeof (buf), "Subscribe failed, rc %d\n", response ? response->code : 0);
+    snprintf(buf, sizeof (buf), "Subscribe failed, rc %d", response ? response->code : 0);
     WriteDBGLog(buf);
     c->killed = 1;
 }
 
 static void
-onConnlost(void *context, char *cause) {
+onConnLost(void *context, char *cause) {
     my_context_t* c = (my_context_t *) context;
     FILE *fp;
     char buf[1024];
@@ -97,7 +107,7 @@ onConnlost(void *context, char *cause) {
     int rc;
 
     c->connected = 0;
-    snprintf(buf, 64, "Broker connection lost. Cause: %s\n", cause);
+    snprintf(buf, 64, "onConnlost - Broker connection lost. Cause: %s", cause);
     WriteDBGLog(buf);
     fp = fopen(dumpFilename, "w");
     fclose(fp);
@@ -106,42 +116,61 @@ onConnlost(void *context, char *cause) {
     snprintf(data.payload, sizeof (data.payload),
 	    "{\"timestamp\":%ld,\"connection\":\"lost\"}", time(NULL));
     snprintf(data.topic, sizeof (data.topic), "%s", "manage");
-    MQTT_send(c, &data);
+    mqttPublish(c, &data);
 
-    /*    conn_opts.keepAliveInterval = 20;
-	conn_opts.cleansession = 1;
-	conn_opts.onSuccess = onReconnect;
-	conn_opts.onFailure = onConnectFailure; 
-	if ((rc = MQTTAsync_reconnect(*c->client)) != MQTTASYNC_SUCCESS) {
-	    snprintf(buf, sizeof (buf), "Failed to start connect, return code %d\n", rc);
-	    WriteDBGLog(buf);
-	    c->killed = 1;
-	} */
 }
 
 static int
 onMsgArrvd(void *context, char* topicName, int topicLen, MQTTAsync_message *message) {
     char buf[128];
-    char msg[128];
+    FILE *fp;
     my_context_t *c = (my_context_t *) context;
     int i;
     char* payloadptr;
-    snprintf(buf, sizeof (buf), "Message arrived\n\ttopic: %s", topicName);
-    WriteDBGLog(buf);
-    payloadptr = message->payload;
-    for (i = 0; i < message->payloadlen && i<sizeof (msg); i++) {
-	msg[i] = *payloadptr++;
-    }
-    msg[i] = '\0';
 
-    snprintf(buf, sizeof (buf), "payload %s", msg);
+    snprintf(buf, sizeof (buf), "onMsgArrvd - Message arrived on topic: %s", topicName);
     WriteDBGLog(buf);
-    if (strstr(msg, "kill") != NULL) {
-	c->killed = 1;
+
+    char *token = strtok(topicName, "/");
+    char *key;
+    while (token != NULL) {
+	key = token;
+	token = strtok(NULL, "/");
     }
-    WriteDBGLog("pi2mqtt killed via mqtt topic");
+
+    if (strcmp(key, "kill") == 0) {
+	c->killed = 1;
+	WriteDBGLog("onMsgArrvd - pi2mqtt killed");
+    }
+
+    if (strcmp(key, "update") == 0) {
+	snprintf(buf, sizeof (buf), "%s.bak", c->configFile);
+	if (rename(c->configFile, buf) == 0) {
+	    if ((fp = fopen(c->configFile, "w")) != NULL) {
+		payloadptr = message->payload;
+		for (i = 0; i < message->payloadlen; i++) {
+		    fputc(*payloadptr, fp);
+		    payloadptr++;
+		}
+		fclose(fp);
+		WriteDBGLog("onMsgArrvd - updated configuration file");
+		c->reboot = 1;
+	    } else {
+		WriteDBGLog("onMsgArrvd - unable to open new configFile");
+	    }
+	} else {
+	    WriteDBGLog("onMsgArrvd - unable to backup configFile");
+	}
+    }
+
+    if (strcmp(key, "reboot") == 0) {
+	c->reboot = 1;
+	WriteDBGLog("onMsgArrvd - reboot requested");
+    }
+
     MQTTAsync_freeMessage(&message);
     MQTTAsync_free(topicName);
+
     return 1;
 }
 
@@ -149,21 +178,21 @@ void
 onSend(void *context, MQTTAsync_successData* response) {
     my_context_t *c = (my_context_t *) context;
     char buf[128];
-    snprintf(buf, sizeof (buf), "Message with token value %d delivery confirmed\n", response->token);
+    snprintf(buf, sizeof (buf), "onSend - Message with token value %d delivery confirmed", response->token);
     WriteDBGLog(buf);
 }
 
-static void
-mqtt_save(void *context, const mqtt_data_t msg) {
+void
+mqttSave(void *context, const mqtt_data_t msg) {
     my_context_t *c = (my_context_t *) context;
     FILE *fp;
     char buf[256];
-    
+
     if ((fp = fopen(dumpFilename, "a")) == NULL) {
-	WriteDBGLog("error opening persistence file");
+	WriteDBGLog("mqttSave - error opening persistence file");
 	return;
     }
-    snprintf(buf, sizeof(buf), "Saving topic %s message %s to file", msg.topic, msg.payload);
+    snprintf(buf, sizeof (buf), "mqttSave - Saving topic %s message %s to file", msg.topic, msg.payload);
     WriteDBGLog(buf);
     fprintf(fp, "%s\n", msg.topic);
     fprintf(fp, "%s\n", msg.payload);
@@ -171,13 +200,13 @@ mqtt_save(void *context, const mqtt_data_t msg) {
 }
 
 void
-MQTT_sub(void *context, const char *topic) {
+mqttSub(void *context, const char *topic) {
     char buf[512];
     my_context_t *c = (my_context_t *) context;
     MQTTAsync_responseOptions opts = MQTTAsync_responseOptions_initializer;
     int rc;
     if (c->connected == 1) {
-	snprintf(buf, sizeof (buf), "Subscribing to topic %s\nfor client %s using QoS %d",
+	snprintf(buf, sizeof (buf), "mqttSub - Subscribing to topic %s for client %s using QoS %d",
 		topic, c->broker->mqttclientid, QOS);
 	WriteDBGLog(buf);
 	opts.onFailure = onSubscribeFailure;
@@ -203,12 +232,12 @@ MQTT_sub(void *context, const char *topic) {
  * @return 
  */
 int
-MQTT_send(void *context, mqtt_data_t *message) {
+mqttPublish(void *context, mqtt_data_t *message) {
     MQTTAsync_token token;
     my_context_t *c = (my_context_t *) context;
     char buf[256];
 
- /*   if (c->connected == 1) { */
+    if (c->connected == 1) {
 	MQTTAsync_responseOptions opts = MQTTAsync_responseOptions_initializer;
 	MQTTAsync_message pubmsg = MQTTAsync_message_initializer;
 	int rc;
@@ -219,21 +248,20 @@ MQTT_send(void *context, mqtt_data_t *message) {
 	pubmsg.qos = QOS;
 	pubmsg.retained = 0;
 	token = 0;
-	
-	snprintf(buf, sizeof(buf), "MQTT_send %s to %s/%s", message->payload, c->broker->mqtthome, message->topic);
+
+	snprintf(buf, sizeof (buf), "mqttPublish - %s to %s/%s", message->payload, c->broker->mqtthome, message->topic);
 	WriteDBGLog(buf);
-	snprintf(buf, sizeof(buf), "%s/%s", c->broker->mqtthome, message->topic);
+	snprintf(buf, sizeof (buf), "%s/%s", c->broker->mqtthome, message->topic);
 	if ((token = MQTTAsync_sendMessage(*c->client, buf, &pubmsg, &opts)) != MQTTASYNC_SUCCESS) {
-	    snprintf(buf, sizeof (buf), "Failed to start sendMessage, return code %d\n", token);
+	    snprintf(buf, sizeof (buf), "mqttPublish - Failed to start sendMessage, return code %d\n", token);
 	    WriteDBGLog(buf);
 	    c->killed = 1;
 	    return (MQTT_FAILURE);
 	}
-/*
+
     } else {
-	mqtt_save(c->broker, *message);
+	mqttSave(c->broker, *message);
     }
- */
     return (MQTT_SUCCESS);
 }
 
@@ -250,17 +278,15 @@ MQTT_init(void* context) {
     MQTTAsync_createOptions create_opts = MQTTAsync_createOptions_initializer;
 
     rc = MQTT_SUCCESS;
-    create_opts.sendWhileDisconnected = 1;
-    create_opts.maxBufferedMessages = 600;
-    if (MQTTAsync_createWithOptions(c->client, c->broker->mqtthostaddr, c->broker->mqttclientid,
-	    MQTTCLIENT_PERSISTENCE_NONE, NULL, &create_opts) != MQTTASYNC_SUCCESS) {
+    if (MQTTAsync_create(c->client, c->broker->mqtthostaddr, c->broker->mqttclientid,
+	    MQTTCLIENT_PERSISTENCE_NONE, NULL) != MQTTASYNC_SUCCESS) {
 	snprintf(buf, sizeof (buf), "Could not create MQTT Client at %s uid %s password: %s",
 		c->broker->mqtthostaddr, c->broker->mqttuid, c->broker->mqttpasswd);
 	WriteDBGLog(buf);
 	c->connected = 0;
 	rc = MQTT_FAILURE;
     } else {
-	MQTTAsync_setCallbacks(*c->client, context, onConnlost, onMsgArrvd, NULL);
+	MQTTAsync_setCallbacks(*c->client, context, onConnLost, onMsgArrvd, NULL);
 	MQTTAsync_setConnected(*c->client, context, onReconnect);
 	conn_opts.keepAliveInterval = 20;
 	conn_opts.cleansession = 1;
