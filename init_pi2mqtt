@@ -5,9 +5,11 @@ piid="rpi$sn"
 filename="pi2mqtt.conf"
 
 if [ -f $filename ]; then
-  echo "init_pi2mqtt - $filename exists, no new one created"
+  echo "init_pi2mqtt - $filename exists, moving to .bak"
+  mv $filename $filename.bak
 else
   echo "init_pi2mqtt - creating $filename"
+fi
   cat << EOF > $filename
 # $filename configuration file to provide to the pi2mqtt tool.  
 # This file sets devices up so that pi2mqtt will monitor.
@@ -30,7 +32,7 @@ mqttbrokerpwd = "password"
 
 # topic for the sensor controller's management port.  
 # This will be monitored to provide management messages back to the controller.
-mqttsubtopic = "$piid/manage/+"
+mqttsubtopic = "$piid/system/manage/+"
 
 # Below is the section for the low temperature NIST temp sensors.  These sensors
 # are 2.8K NTC Thermistors. You can have
@@ -127,8 +129,6 @@ debuglogfile = "./temp2mqtt.log"
 
 EOF2
 
-fi
-
 fullfilename=/usr/local/share/pi2mqtt/$filename
 
 if [ -f pi2mqtt.sh ]; then
@@ -213,5 +213,3 @@ echo "               $ sudo chmod +x /etc/init.d/pi2mqtt"
 echo "               $ sudo update-rc.d pi2mqtt defaults"
 
 fi
-
-
