@@ -46,12 +46,13 @@ Using GIT:
     $ git clone https://github.com/ngongca/pi2mqtt.git
     $ autoreconf -i
     $ ./configure
+    $ ./init_pi2mqtt
+    $ _edit the configuration file_ 
     $ make
     $ sudo make install
-    $ ./init_pi2mqtt
 ```
 ## Configuration
-`./init_pi2mqtt` generates a template configuration file, ___template.conf___ , that will need to be edited for your configuration.  It uses the **confuse** libary syntax. Below is the syntax for the various types of sensors.
+`./init_pi2mqtt` generates a template configuration file, ___pi2mqtt.conf___ , that will need to be edited for your configuration.  It uses the **confuse** libary syntax. Below is the syntax for the various types of sensors.
 ### Manditory fields
 client ID for the mqtt sensor controller (usually the microcontroller id such as the PI  THIS MUST BE A UNIQUE identifier)
 ```

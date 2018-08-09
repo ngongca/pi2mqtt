@@ -1,7 +1,8 @@
 #!/bin/bash
 
 sn=$(cat /proc/cpuinfo | grep Serial | awk '{print $3}')
-filename="rpi$sn.conf"
+piid="rpi$sn"
+filename="pi2mqtt.conf"
 
 if [ -f $filename ]; then
   echo "init_pi2mqtt - $filename exists, no new one created"
@@ -11,7 +12,7 @@ else
 # $filename configuration file to provide to the pi2mqtt tool.  
 # This file sets devices up so that pi2mqtt will monitor.
 
-home = rpi$sn
+home = $piid
 
 # client ID for the mqtt sensor controller (usually the microcontroller id 
 # such as the PI  THIS MUST BE A UNIQUE identifier)
@@ -29,7 +30,7 @@ mqttbrokerpwd = "password"
 
 # topic for the sensor controller's management port.  
 # This will be monitored to provide management messages back to the controller.
-mqttsubtopic = "rpi$sn/manage/+"
+mqttsubtopic = "$piid/manage/+"
 
 # Below is the section for the low temperature NIST temp sensors.  These sensors
 # are 2.8K NTC Thermistors. You can have
@@ -128,7 +129,7 @@ EOF2
 
 fi
 
-fullfilename=$(pwd)/$filename
+fullfilename=/usr/local/share/pi2mqtt/$filename
 
 if [ -f pi2mqtt.sh ]; then
   echo "init_pi2mqtt - pi2mqtt.sh exists, no new one created"
@@ -154,7 +155,10 @@ cat << "EOF6" >> pi2mqtt.sh
 RUNAS=pi
 
 PIDFILE=/var/run/pi2mqtt.pid
+LOGDIR=/var/log/pi2mqtt
 LOGFILE=/var/log/pi2mqtt/pi2mqtt.log
+DUMPDIR=/var/tmp/pi2mqtt
+
 
 start() {
   if [ -f /var/run/$PIDNAME ] && kill -0 $(cat /var/run/$PIDNAME); then
@@ -162,6 +166,13 @@ start() {
     return 1
   fi
   echo 'Starting service…' >&2
+  if [ ! -d $DUMPDIR ]; then
+    su -c "mkdir -p $DUMPDIR" $RUNAS
+  fi
+  if [ ! -d $LOGDIR ]; then
+    su -c "mkdir -p $LOGDIR" $RUNAS
+  fi
+
   local CMD="$SCRIPT &> \"$LOGFILE\" & echo \$!"
   su -c "$CMD" $RUNAS > "$PIDFILE"
   echo 'Service started' >&2
@@ -196,14 +207,10 @@ EOF6
 
 echo " "
 echo "!!!!!!!!!!!!"
-echo "init_pi2mqtt - You must copy pi2mqtt.sh into /etc/init.d/ and enable"
+echo "init_pi2mqtt - You must update config and copy pi2mqtt.sh into /etc/init.d/ and enable"
 echo "               $ sudo cp pi2mqtt.sh /etc/init.d/pi2mqtt"
 echo "               $ sudo chmod +x /etc/init.d/pi2mqtt"
 echo "               $ sudo update-rc.d pi2mqtt defaults"
-echo " "
-echo "               Ensure that /var/log/pi2mqtt/ is available"
-echo "               $ sudo mkdir /var/log/pi2mqtt/"
-echo "               $ sudo chown pi /var/log/pi2mqtt"
 
 fi
 

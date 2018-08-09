@@ -1,7 +1,7 @@
 /*
  * The MIT License
  *
- * Copyright 2017 Nick Ong <onichola@gmail.com>.
+ * Copyright 2017 Nick Ong <nick@ongsend.com>.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -27,6 +27,7 @@
 #include <time.h>
 #include <unistd.h>
 #include <stdlib.h>
+#include <errno.h>
 #include "mqtt.h"
 #include "debug.h"
 
@@ -80,6 +81,8 @@ onReconnect(void* context, char* response) {
 		mqttPublish(c, &data);
 	    }
 	    fclose(fp);
+	} else {
+	    perror("mqtt.c->onReconnect");
 	}
 	snprintf(data.payload, sizeof (data.payload),
 		"{\"timestamp\":%ld,\"connection\":\"reconnected\"}", time(NULL));
@@ -109,8 +112,11 @@ onConnLost(void *context, char *cause) {
     c->connected = 0;
     snprintf(buf, 64, "onConnlost - Broker connection lost. Cause: %s", cause);
     WriteDBGLog(buf);
-    fp = fopen(dumpFilename, "w");
-    fclose(fp);
+    if ((fp = fopen(dumpFilename, "w")) == NULL) {
+	perror("mqtt.c->onConnLost");
+    } else {
+	fclose(fp);
+    }
 
     // Let the broker know when the connection was lost
     snprintf(data.payload, sizeof (data.payload),
@@ -156,7 +162,7 @@ onMsgArrvd(void *context, char* topicName, int topicLen, MQTTAsync_message *mess
 		WriteDBGLog("onMsgArrvd - updated configuration file");
 		c->reboot = 1;
 	    } else {
-		WriteDBGLog("onMsgArrvd - unable to open new configFile");
+		perror("mqtt.c->onMsgArrvd");
 	    }
 	} else {
 	    WriteDBGLog("onMsgArrvd - unable to backup configFile");
@@ -167,10 +173,8 @@ onMsgArrvd(void *context, char* topicName, int topicLen, MQTTAsync_message *mess
 	c->reboot = 1;
 	WriteDBGLog("onMsgArrvd - reboot requested");
     }
-
     MQTTAsync_freeMessage(&message);
     MQTTAsync_free(topicName);
-
     return 1;
 }
 
@@ -190,9 +194,10 @@ mqttSave(void *context, const mqtt_data_t msg) {
 
     if ((fp = fopen(dumpFilename, "a")) == NULL) {
 	WriteDBGLog("mqttSave - error opening persistence file");
+	perror("mqtt.c->mqttSave");
 	return;
     }
-    snprintf(buf, sizeof (buf), "mqttSave - Saving topic %s message %s to file", msg.topic, msg.payload);
+    snprintf(buf, sizeof (buf), "mqttSave - Saving topic %s/%s message %s to file", c->broker->mqtthome, msg.topic, msg.payload);
     WriteDBGLog(buf);
     fprintf(fp, "%s\n", msg.topic);
     fprintf(fp, "%s\n", msg.payload);
@@ -260,7 +265,7 @@ mqttPublish(void *context, mqtt_data_t *message) {
 	}
 
     } else {
-	mqttSave(c->broker, *message);
+	mqttSave(c, *message);
     }
     return (MQTT_SUCCESS);
 }

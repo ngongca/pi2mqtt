@@ -6,7 +6,7 @@
 
 /* 
  * File:   mqtt.h
- * Author: Nick Ong <onichola@gmail.com>
+ * Author: Nick Ong <nick@ongsend.com>
  *
  * Created on June 24, 2017, 1:58 PM
  */
@@ -29,7 +29,7 @@
 #endif
 
 #ifndef MQTT_DUMP_FILE
-#define MQTT_DUMP_FILE "./dump"
+#define MQTT_DUMP_FILE "/var/tmp/pi2mqtt/dump"
 #endif
 
 #ifdef __cplusplus

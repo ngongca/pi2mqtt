@@ -31,6 +31,7 @@ AC_CHECK_HEADERS([utime.h])
 AC_CHECK_HEADERS([math.h])
 AC_CHECK_HEADERS([time.h])
 AC_CHECK_HEADERS([MQTTAsync.h])
+AC_CHECK_HEADERS([errno.h])
 
 # Checks for typedefs, structures, and compiler characteristics.
 

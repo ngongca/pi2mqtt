@@ -1,7 +1,7 @@
 /*
  * The MIT License
  *
- * Copyright 2017 Nick Ong <onichola@gmail.com>.
+ * Copyright 2017 Nick Ong <nick@ongsend.com>.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -258,7 +258,7 @@ main(int argc, char** argv) {
 
     cfg_t *cfg = 0;
     int verbose = 0;
-    char *configFile = "./template.conf";
+    char *configFile = "./pi2mqtt.conf";
 
 
     while ((c = getopt(argc, argv, "v?hc:")) != -1) {
