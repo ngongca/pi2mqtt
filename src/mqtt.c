@@ -283,6 +283,9 @@ MQTT_init(void* context) {
     MQTTAsync_createOptions create_opts = MQTTAsync_createOptions_initializer;
 
     rc = MQTT_SUCCESS;
+    snprintf(buf, sizeof (buf), "MQTT_init - create MQTT Client at %s uid %s password: %s",
+		c->broker->mqtthostaddr, c->broker->mqttuid, c->broker->mqttpasswd);
+	WriteDBGLog(buf);
     if (MQTTAsync_create(c->client, c->broker->mqtthostaddr, c->broker->mqttclientid,
 	    MQTTCLIENT_PERSISTENCE_NONE, NULL) != MQTTASYNC_SUCCESS) {
 	snprintf(buf, sizeof (buf), "Could not create MQTT Client at %s uid %s password: %s",
@@ -301,8 +304,8 @@ MQTT_init(void* context) {
 	conn_opts.automaticReconnect = 1;
 	if (c->broker->mqttpasswd != 0) conn_opts.password = c->broker->mqttpasswd;
 	if (c->broker->mqttuid != 0) conn_opts.username = c->broker->mqttuid;
-
-	WriteDBGLog("Attempting to connect");
+	snprintf(buf, sizeof (buf), "MQTT_init - Attempting to connect to %s %s", conn_opts.username,  conn_opts.password);
+	WriteDBGLog(buf);
 	if ((rc = (MQTTAsync_connect(*c->client, &conn_opts))) != MQTTASYNC_SUCCESS) {
 	    snprintf(buf, sizeof (buf),
 		    "Failed to start connect user: %s, password: %s return code %d",
