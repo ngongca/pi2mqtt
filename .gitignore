@@ -37,5 +37,6 @@ template.conf
 *.gcda
 src/bin/pi2mqtt
 src/pi2mqtt
-
-
+*.conf
+*.conf.*
+rpi0000*

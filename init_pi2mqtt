@@ -25,7 +25,7 @@ clientid = client$RANDOM
 mqttbrokeraddress = "localhost"
 
 #mqtt broker uid
-mqttbrokeruid = "mqttpi"
+mqttbrokeruid = "uid"
 
 #mqtt broker uid password
 mqttbrokerpwd = "password"
@@ -118,7 +118,8 @@ EOF1
 # pin = <pin number>
 # location = "<location>"
 # mqttpubtopic = "switchstate"
-# sampletime = "1"
+# sampletime = 1
+# samplecontinuous = 0
 #}
 
 # the log file name that will be created if -v or debug mode is set

@@ -55,6 +55,7 @@ extern "C" {
         int state; ///< state of the doorswitch
         char topic[64]; ///< topic suffix used for publishing
         int sampletime; ///< sample time of this switch in seconds.
+	int sampleContinuous; ///< provide continuous updates
     } doorswitch_port_t;
 
 
@@ -65,10 +66,11 @@ extern "C" {
      * @param topic - suffix topic which this port will publish to mqtt
      * @param location - location for this port
      * @param sampletime - sample time in seconds
+     * @param sampleContinuous - set true if you wish to report continously
      * @return a configured port
      */
     extern doorswitch_port_t doorswitch_createPort(int pin, const char* id,
-            const char* topic, const char* location, int sampletime);
+            const char* topic, const char* location, int sampletime, int sampleContinuous);
 
     /**
      * Initialize the doorswitch - In this case, just set up the wiringPi.

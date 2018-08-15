@@ -126,6 +126,14 @@ onConnLost(void *context, char *cause) {
 
 }
 
+/**
+ * 
+ * @param context
+ * @param topicName
+ * @param topicLen
+ * @param message
+ * @return 
+ */
 static int
 onMsgArrvd(void *context, char* topicName, int topicLen, MQTTAsync_message *message) {
     char buf[128];
@@ -133,6 +141,7 @@ onMsgArrvd(void *context, char* topicName, int topicLen, MQTTAsync_message *mess
     my_context_t *c = (my_context_t *) context;
     int i;
     char* payloadptr;
+    mqtt_data_t data;
 
     snprintf(buf, sizeof (buf), "onMsgArrvd - Message arrived on topic: %s", topicName);
     WriteDBGLog(buf);
@@ -147,6 +156,10 @@ onMsgArrvd(void *context, char* topicName, int topicLen, MQTTAsync_message *mess
     if (strcmp(key, "kill") == 0) {
 	c->killed = 1;
 	WriteDBGLog("onMsgArrvd - pi2mqtt killed");
+	snprintf(data.payload, sizeof (data.payload),
+		"{\"timestamp\":%ld,\"system\":\"kill requested\"}", time(NULL));
+	snprintf(data.topic, sizeof (data.topic), "%s", "manage");
+	mqttPublish(c, &data);
     }
 
     if (strcmp(key, "update") == 0) {
@@ -158,9 +171,13 @@ onMsgArrvd(void *context, char* topicName, int topicLen, MQTTAsync_message *mess
 		    fputc(*payloadptr, fp);
 		    payloadptr++;
 		}
-		fclose(fp);
-		WriteDBGLog("onMsgArrvd - updated configuration file");
+		fclose(fp);		
 		c->reboot = 1;
+		WriteDBGLog("onMsgArrvd - updated configuration file");
+		snprintf(data.payload, sizeof (data.payload),
+			"{\"timestamp\":%ld,\"system\":\"update\"}", time(NULL));
+		snprintf(data.topic, sizeof (data.topic), "%s", "manage");
+		mqttPublish(c, &data);
 	    } else {
 		perror("mqtt.c->onMsgArrvd");
 	    }
@@ -172,6 +189,19 @@ onMsgArrvd(void *context, char* topicName, int topicLen, MQTTAsync_message *mess
     if (strcmp(key, "reboot") == 0) {
 	c->reboot = 1;
 	WriteDBGLog("onMsgArrvd - reboot requested");
+	snprintf(data.payload, sizeof (data.payload),
+		"{\"timestamp\":%ld,\"system\":\"reboot requested\"}", time(NULL));
+	snprintf(data.topic, sizeof (data.topic), "%s", "manage");
+	mqttPublish(c, &data);
+    }
+    
+    if (strcmp(key, "read") ==0) {
+	c->readData = 1;
+	WriteDBGLog("onMsgArrvd - instant read requested");
+	snprintf(data.payload, sizeof (data.payload),
+		"{\"timestamp\":%ld,\"system\":\"read requested\"}", time(NULL));
+	snprintf(data.topic, sizeof (data.topic), "%s", "manage");
+	mqttPublish(c, &data);
     }
     MQTTAsync_freeMessage(&message);
     MQTTAsync_free(topicName);
@@ -193,7 +223,8 @@ mqttSave(void *context, const mqtt_data_t msg) {
     char buf[256];
 
     if ((fp = fopen(dumpFilename, "a")) == NULL) {
-	WriteDBGLog("mqttSave - error opening persistence file");
+	snprintf(buf, sizeof(buf), "mqttSave - error opening persistence file %s", dumpFilename);
+	WriteDBGLog(buf);
 	perror("mqtt.c->mqttSave");
 	return;
     }
@@ -284,8 +315,8 @@ MQTT_init(void* context) {
 
     rc = MQTT_SUCCESS;
     snprintf(buf, sizeof (buf), "MQTT_init - create MQTT Client at %s uid %s password: %s",
-		c->broker->mqtthostaddr, c->broker->mqttuid, c->broker->mqttpasswd);
-	WriteDBGLog(buf);
+	    c->broker->mqtthostaddr, c->broker->mqttuid, c->broker->mqttpasswd);
+    WriteDBGLog(buf);
     if (MQTTAsync_create(c->client, c->broker->mqtthostaddr, c->broker->mqttclientid,
 	    MQTTCLIENT_PERSISTENCE_NONE, NULL) != MQTTASYNC_SUCCESS) {
 	snprintf(buf, sizeof (buf), "Could not create MQTT Client at %s uid %s password: %s",
@@ -304,7 +335,7 @@ MQTT_init(void* context) {
 	conn_opts.automaticReconnect = 1;
 	if (c->broker->mqttpasswd != 0) conn_opts.password = c->broker->mqttpasswd;
 	if (c->broker->mqttuid != 0) conn_opts.username = c->broker->mqttuid;
-	snprintf(buf, sizeof (buf), "MQTT_init - Attempting to connect to %s %s", conn_opts.username,  conn_opts.password);
+	snprintf(buf, sizeof (buf), "MQTT_init - Attempting to connect to %s %s", conn_opts.username, conn_opts.password);
 	WriteDBGLog(buf);
 	if ((rc = (MQTTAsync_connect(*c->client, &conn_opts))) != MQTTASYNC_SUCCESS) {
 	    snprintf(buf, sizeof (buf),

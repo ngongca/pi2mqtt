@@ -48,11 +48,13 @@ extern "C" {
         int killed; ///< flag to kill loop
 	int reboot; ///< flag to reboot system program
 	int connected; ///<flag to indicate current client is connected.
+	int readData; ///<flag to imediately read data and bypass interval.
         MQTTAsync* client; ///< the current client.
         mqtt_broker_t* broker; ///< the current broker information.
 	char *configFile; ///< configuration file use at boot
     } my_context_t;
     
+#define my_context_t_initializer { 0, 0, 0, 0, NULL, NULL, NULL }
     
     typedef struct {
         char payload[MQTT_MAXPAYLOAD];  ///< payload for publishing

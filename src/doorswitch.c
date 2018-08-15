@@ -45,7 +45,7 @@
  */
 doorswitch_port_t
 doorswitch_createPort(int pin, const char *id, const char *topic, 
-        const char* location, int sampletime) {
+        const char* location, int sampletime, int sampleContinous) {
     char dbgBuf[256];
     doorswitch_port_t port;
     snprintf(dbgBuf, sizeof (dbgBuf), "Creating door switch %s pin %d at %s", id, pin, location);
@@ -53,6 +53,7 @@ doorswitch_createPort(int pin, const char *id, const char *topic,
     port.pin = pin;
     port.state = -1;
     port.sampletime = sampletime;
+    port.sampleContinuous = sampleContinous;
     strncpy(port.id, id, sizeof (port.id));
     strncpy(port.topic, topic, sizeof (port.topic));
     strncpy(port.location, location, sizeof (port.location));
@@ -93,7 +94,17 @@ ProcessDoorswitchData(doorswitch_port_t* port, mqtt_data_t* message) {
         snprintf(message->topic, sizeof (message->topic), "%s/%s/%s",
                 port->id, port->location, port->topic);
         rc = DOORSWITCH_SUCCESS;
-    } 
+    } else if ( port->sampleContinuous == 1 ) {
+	snprintf(dbgBuf, sizeof (dbgBuf), "Door %s state %d", port->id, data);
+        WriteDBGLog(dbgBuf);
+        port->state = data;
+        snprintf(message->payload, sizeof (message->payload), 
+                "{\"timestamp\":%ld,\"value\":\"%s\"}",
+                time(NULL), data == 1 ? "opened" : "closed");
+        snprintf(message->topic, sizeof (message->topic), "%s/%s/%s",
+                port->id, port->location, port->topic);
+        rc = DOORSWITCH_SUCCESS;
+    }
     return rc;
 }
 

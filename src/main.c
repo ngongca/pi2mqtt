@@ -100,7 +100,7 @@ read_config(char config_filename[]) {
 	CFG_STR("B", "000e00", CFGF_NONE),
 	CFG_STR("C", "000e00", CFGF_NONE),
 	CFG_FLOAT("Rb", 0.0, CFGF_NONE),
-	CFG_STR("mqttpubtopic", "home/tempsensor", CFGF_NONE),
+	CFG_STR("mqttpubtopic", "tempsensor", CFGF_NONE),
 	CFG_STR("location", "location", CFGF_NONE),
 	CFG_INT("sampletime", 5, CFGF_NONE),
 	CFG_END()
@@ -115,21 +115,22 @@ read_config(char config_filename[]) {
     };
     static cfg_opt_t raven_opts[] = {
 	CFG_STR("address", "/dev/ttyUSB0", CFGF_NONE),
-	CFG_STR("mqttpubtopic", "home/device/demand", CFGF_NONE),
+	CFG_STR("mqttpubtopic", "demand", CFGF_NONE),
 	CFG_STR("location", "location", CFGF_NONE),
 	CFG_END()
     };
     static cfg_opt_t dht22_opts[] = {
 	CFG_INT("pin", 1, CFGF_NONE),
-	CFG_STR("mqttpubtopic", "home/device", CFGF_NONE),
+	CFG_STR("mqttpubtopic", "temp", CFGF_NONE),
 	CFG_INT("isfahrenheit", 1, CFGF_NONE),
 	CFG_END()
     };
     static cfg_opt_t doorswitch_opts[] = {
 	CFG_INT("pin", 1, CFGF_NONE),
-	CFG_STR("mqttpubtopic", "home/door", CFGF_NONE),
+	CFG_STR("mqttpubtopic", "door", CFGF_NONE),
 	CFG_STR("location", "location", CFGF_NONE),
 	CFG_INT("sampletime", 5, CFGF_NONE),
+	CFG_INT("samplecontinuous", 0, CFGF_NONE),
 	CFG_END()
     };
     static cfg_opt_t opts[] = {
@@ -201,7 +202,8 @@ LoadINIParms(cfg_t **config, ds18b20pi_ports_t *sensors, raven_ports_t *raven, d
 	    scfg = cfg_getnsec(*config, "doorswitch", i);
 	    doorswitch->ports[i] = doorswitch_createPort(cfg_getint(scfg, "pin"),
 		    cfg_title(scfg), cfg_getstr(scfg, "mqttpubtopic"),
-		    cfg_getstr(scfg, "location"), cfg_getint(scfg, "sampletime"));
+		    cfg_getstr(scfg, "location"), cfg_getint(scfg, "sampletime"),
+		    cfg_getint(scfg, "samplecontinuous"));
 	    doorswitch->size++;
 	    doorswitch->lastsample[i] = 0;
 	}
@@ -242,13 +244,13 @@ main(int argc, char** argv) {
     tempsensor_ports_t tempsensor_ports;
     mqtt_broker_t mqtt_broker;
     MQTTAsync mqtt_client;
-    my_context_t my_context;
+    my_context_t my_context = my_context_t_initializer;
     my_context_t *context;
     mqtt_data_t message;
     struct timespec delay;
 
     delay.tv_nsec = 1000000;
-    delay.tv_sec = 0;
+    delay.tv_sec = 1;
 
     ds18b20_ports.size = 0;
     raven_ports.size = 0;
@@ -287,9 +289,6 @@ main(int argc, char** argv) {
     InitDBGLog("pi2MQTT", cfg_getstr(cfg, "debuglogfile"), cfg_getint(cfg, "debugmode"), verbose);
     WriteDBGLog(STARTUP);
 
-    my_context.killed = 0;
-    my_context.reboot = 0;
-    my_context.connected = 0;
     my_context.broker = &mqtt_broker;
     my_context.client = &mqtt_client;
     my_context.configFile = configFile;
@@ -344,7 +343,7 @@ main(int argc, char** argv) {
     while (!context->killed && !context->reboot) {
 	for (i = 0; i < ds18b20_ports.size; i++) {
 	    long t = time(NULL);
-	    if (t - ds18b20_ports.lastsample[i] >= (long) ds18b20_ports.ports[i].sampletime) {
+	    if (t - ds18b20_ports.lastsample[i] >= (long) ds18b20_ports.ports[i].sampletime || context->readData != 0) {
 		ds18b20_ports.lastsample[i] = t;
 		if (DS18B20PI_process_data(ds18b20_ports.ports[i], &message) == DS18B20PI_SUCCESS) {
 		    mqttPublish(context, &message);
@@ -357,7 +356,7 @@ main(int argc, char** argv) {
 	// process door switches
 	for (i = 0; i < doorswitch_ports.size; i++) {
 	    long t = time(NULL);
-	    if (t - doorswitch_ports.lastsample[i] >= (long) doorswitch_ports.ports[i].sampletime) {
+	    if (t - doorswitch_ports.lastsample[i] >= (long) doorswitch_ports.ports[i].sampletime || context->readData != 0) {
 		doorswitch_ports.lastsample[i] = t;
 		if (ProcessDoorswitchData(&doorswitch_ports.ports[i], &message) == DOORSWITCH_SUCCESS) {
 		    mqttPublish(context, &message);
@@ -368,7 +367,7 @@ main(int argc, char** argv) {
 	// process tempsensors
 	for (i = 0; i < tempsensor_ports.size; i++) {
 	    long t = time(NULL);
-	    if (t - tempsensor_ports.lastsample[i] >= (long) tempsensor_ports.ports[i].sampletime) {
+	    if (t - tempsensor_ports.lastsample[i] >= (long) tempsensor_ports.ports[i].sampletime || context->readData != 0) {
 		tempsensor_ports.lastsample[i] = t;
 		if (ProcessTempsensorData(&tempsensor_ports.ports[i], &message) == TEMPSENSOR_SUCCESS) {
 		    mqttPublish(context, &message);
@@ -392,6 +391,7 @@ main(int argc, char** argv) {
 	    }
 	}
 	cntr++;
+	context->readData = 0;  // Should be a one time shot.
 	nanosleep(&delay, NULL);
 
     } // end while not reboot or finished
