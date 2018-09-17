@@ -61,7 +61,19 @@ extern "C" {
         char topic[MQTT_MAXTOPIC]; ///< mqtt publishing topic
     } mqtt_data_t;
 
-    extern void mqttSub(MQTTAsync client, const char* topic);
+    /**
+     * Subscribe MQTT client to topic
+     * @param context
+     * @param topic
+     */
+    extern void mqttSub(void* context, const char* topic);
+    
+    /**
+     * This routine has the MQTT client pointed to in context publish a message
+     * @param context MQTT context used that contains the client for this session
+     * @param message to publish
+     * @return 
+     */
     extern int mqttPublish(void* context, mqtt_data_t* message);
     extern int MQTT_init(void* context);
 

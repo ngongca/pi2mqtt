@@ -299,8 +299,8 @@ main(int argc, char** argv) {
 	exit(EXIT_FAILURE);
     }
 
-    nanosleep(&delay, NULL);
-
+    //Wait for connection
+    nanosleep(&delay,NULL);
     cntr = 0;
 
     //Initialize all ports.

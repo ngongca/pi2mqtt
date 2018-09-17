@@ -47,9 +47,17 @@ onConnectFailure(void* context, MQTTAsync_failureData* response) {
 static void
 onConnect(void* context, MQTTAsync_successData* response) {
     my_context_t *c = (my_context_t *) context;
+    mqtt_data_t data;
+
     c->connected = 1;
     WriteDBGLog("Successful connection");
     mqttSub(c, c->broker->mqttmanagementtopic);
+
+    snprintf(data.payload, sizeof (data.payload),
+	    "{\"timestamp\":%ld,\"system\":\"connected\"}", time(NULL));
+    snprintf(data.topic, sizeof (data.topic), "%s", "manage");
+    mqttPublish(c, &data);
+
 }
 
 void
@@ -171,7 +179,7 @@ onMsgArrvd(void *context, char* topicName, int topicLen, MQTTAsync_message *mess
 		    fputc(*payloadptr, fp);
 		    payloadptr++;
 		}
-		fclose(fp);		
+		fclose(fp);
 		c->reboot = 1;
 		WriteDBGLog("onMsgArrvd - updated configuration file");
 		snprintf(data.payload, sizeof (data.payload),
@@ -194,8 +202,8 @@ onMsgArrvd(void *context, char* topicName, int topicLen, MQTTAsync_message *mess
 	snprintf(data.topic, sizeof (data.topic), "%s", "manage");
 	mqttPublish(c, &data);
     }
-    
-    if (strcmp(key, "read") ==0) {
+
+    if (strcmp(key, "read") == 0) {
 	c->readData = 1;
 	WriteDBGLog("onMsgArrvd - instant read requested");
 	snprintf(data.payload, sizeof (data.payload),
@@ -223,7 +231,7 @@ mqttSave(void *context, const mqtt_data_t msg) {
     char buf[256];
 
     if ((fp = fopen(dumpFilename, "a")) == NULL) {
-	snprintf(buf, sizeof(buf), "mqttSave - error opening persistence file %s", dumpFilename);
+	snprintf(buf, sizeof (buf), "mqttSave - error opening persistence file %s", dumpFilename);
 	WriteDBGLog(buf);
 	perror("mqtt.c->mqttSave");
 	return;
@@ -276,13 +284,13 @@ mqttPublish(void *context, mqtt_data_t *message) {
     if (c->connected == 1) {
 	MQTTAsync_responseOptions opts = MQTTAsync_responseOptions_initializer;
 	MQTTAsync_message pubmsg = MQTTAsync_message_initializer;
-	int rc;
+
 	opts.onSuccess = onSend;
 	opts.context = c;
 	pubmsg.payload = message->payload;
 	pubmsg.payloadlen = strlen(message->payload);
 	pubmsg.qos = QOS;
-	pubmsg.retained = 0;
+	pubmsg.retained = 1;
 	token = 0;
 
 	snprintf(buf, sizeof (buf), "mqttPublish - %s to %s/%s", message->payload, c->broker->mqtthome, message->topic);
@@ -312,6 +320,7 @@ MQTT_init(void* context) {
     MQTTAsync_connectOptions conn_opts = MQTTAsync_connectOptions_initializer;
     MQTTAsync_disconnectOptions disc_opts = MQTTAsync_disconnectOptions_initializer;
     MQTTAsync_createOptions create_opts = MQTTAsync_createOptions_initializer;
+    MQTTAsync_willOptions lwt_opts = MQTTAsync_willOptions_initializer;
 
     rc = MQTT_SUCCESS;
     snprintf(buf, sizeof (buf), "MQTT_init - create MQTT Client at %s uid %s password: %s",
@@ -325,14 +334,24 @@ MQTT_init(void* context) {
 	c->connected = 0;
 	rc = MQTT_FAILURE;
     } else {
+	char top[256];
+	lwt_opts.message = "{\"status\":\"system offline\"}";
+	snprintf(top, 256, "%s/manage", c->broker->mqtthome);
+	lwt_opts.topicName = top;
+	lwt_opts.qos = 1;
+	lwt_opts.retained = 1;
+
 	MQTTAsync_setCallbacks(*c->client, context, onConnLost, onMsgArrvd, NULL);
 	MQTTAsync_setConnected(*c->client, context, onReconnect);
+	
+	conn_opts.will = &lwt_opts;
 	conn_opts.keepAliveInterval = 20;
 	conn_opts.cleansession = 1;
 	conn_opts.context = context;
 	conn_opts.onSuccess = onConnect;
 	conn_opts.onFailure = onConnectFailure;
 	conn_opts.automaticReconnect = 1;
+	
 	if (c->broker->mqttpasswd != 0) conn_opts.password = c->broker->mqttpasswd;
 	if (c->broker->mqttuid != 0) conn_opts.username = c->broker->mqttuid;
 	snprintf(buf, sizeof (buf), "MQTT_init - Attempting to connect to %s %s", conn_opts.username, conn_opts.password);
