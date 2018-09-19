@@ -54,7 +54,7 @@ onConnect(void* context, MQTTAsync_successData* response) {
     mqttSub(c, c->broker->mqttmanagementtopic);
 
     snprintf(data.payload, sizeof (data.payload),
-	    "{\"timestamp\":%ld,\"system\":\"connected\"}", time(NULL));
+	    "{\"timestamp\":%ld,\"status\":\"connected\"}", time(NULL));
     snprintf(data.topic, sizeof (data.topic), "%s", "manage");
     mqttPublish(c, &data);
 
@@ -280,7 +280,9 @@ mqttPublish(void *context, mqtt_data_t *message) {
     MQTTAsync_token token;
     my_context_t *c = (my_context_t *) context;
     char buf[256];
-
+    snprintf(buf, sizeof (buf), "mqttPublish - %s to %s/%s Connected %d", message->payload, 
+	    c->broker->mqtthome, message->topic, c->connected);
+    WriteDBGLog(buf);
     if (c->connected == 1) {
 	MQTTAsync_responseOptions opts = MQTTAsync_responseOptions_initializer;
 	MQTTAsync_message pubmsg = MQTTAsync_message_initializer;
@@ -293,8 +295,6 @@ mqttPublish(void *context, mqtt_data_t *message) {
 	pubmsg.retained = 1;
 	token = 0;
 
-	snprintf(buf, sizeof (buf), "mqttPublish - %s to %s/%s", message->payload, c->broker->mqtthome, message->topic);
-	WriteDBGLog(buf);
 	snprintf(buf, sizeof (buf), "%s/%s", c->broker->mqtthome, message->topic);
 	if ((token = MQTTAsync_sendMessage(*c->client, buf, &pubmsg, &opts)) != MQTTASYNC_SUCCESS) {
 	    snprintf(buf, sizeof (buf), "mqttPublish - Failed to start sendMessage, return code %d\n", token);
@@ -304,6 +304,7 @@ mqttPublish(void *context, mqtt_data_t *message) {
 	}
 
     } else {
+	
 	mqttSave(c, *message);
     }
     return (MQTT_SUCCESS);
